@@ -23,6 +23,7 @@ class FavoritesDelete(BaseModel):
     product_ids: List[int] = Field(..., min_items=1, description="List of product IDs to remove from favorites")
 
 
+@router.get("")
 @router.get("/")
 async def get_favorites(
     user_id: Optional[str] = Query(None, description="Filter by user_id (UUID). Public read access - no authentication required."),
@@ -74,6 +75,7 @@ async def get_favorites(
         raise HTTPException(status_code=500, detail=f"Error fetching favorites: {str(e)}")
 
 
+@router.post("")
 @router.post("/")
 async def update_favorites(
     favorites_update: FavoritesUpdate = Body(...),
@@ -187,6 +189,7 @@ async def update_favorites(
         )
 
 
+@router.delete("")
 @router.delete("/")
 async def delete_favorites(
     favorites_delete: FavoritesDelete = Body(...),

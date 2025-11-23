@@ -28,6 +28,7 @@ class BulkProductRequest(BaseModel):
     product_ids: List[int] = Field(..., min_items=1, max_items=1000, description="List of product IDs to fetch")
 
 
+@router.get("", response_model=PaginatedResponse[dict])
 @router.get("/", response_model=PaginatedResponse[dict])
 async def list_products(
     pagination: PaginationParams = Depends(),

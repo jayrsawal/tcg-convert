@@ -301,27 +301,60 @@ export const fetchCurrentPricesBulk = async (productIds) => {
  * @param {Array<number>} productIds - Array of product IDs
  * @returns {Promise<Array>} Array of product objects
  */
+// Cache and request deduplication for products bulk
+const productsBulkCache = {};
+const productsBulkPromises = {};
+
 export const fetchProductsBulk = async (productIds) => {
   if (!productIds || productIds.length === 0) {
     return [];
   }
 
+  // Create cache key from sorted product IDs
+  const sortedIds = [...productIds].sort((a, b) => a - b);
+  const cacheKey = `products_${sortedIds.join(',')}`;
+  
+  // Return cached data if available (with longer TTL - 60 seconds for products)
+  if (productsBulkCache[cacheKey] && Date.now() - productsBulkCache[cacheKey].timestamp < 60000) {
+    return productsBulkCache[cacheKey].data;
+  }
+  
+  // If there's already an in-flight request, return that promise
+  if (productsBulkPromises[cacheKey]) {
+    return await productsBulkPromises[cacheKey];
+  }
+
   try {
     const url = API_BASE_URL ? `${API_BASE_URL}/products/bulk` : '/products/bulk';
-    const response = await fetch(url, {
+    const fetchPromise = fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ product_ids: productIds }),
+    }).then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const result = data.products || data.data || data || [];
+      
+      // Cache the result
+      productsBulkCache[cacheKey] = { data: result, timestamp: Date.now() };
+      return result;
+    }).catch((error) => {
+      console.error('Error fetching products bulk:', error);
+      throw error;
+    }).finally(() => {
+      // Remove from in-flight promises
+      delete productsBulkPromises[cacheKey];
     });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return data.products || data.data || data || [];
+    
+    // Store the promise to deduplicate concurrent requests
+    productsBulkPromises[cacheKey] = fetchPromise;
+    
+    return await fetchPromise;
   } catch (error) {
     console.error('Error fetching products:', error);
     return [];
@@ -385,7 +418,7 @@ export const extractExtendedDataFromProduct = (product) => {
  */
 export const fetchCategories = async () => {
   try {
-    const url = API_BASE_URL ? `${API_BASE_URL}/categories` : '/categories';
+    const url = API_BASE_URL ? `${API_BASE_URL}/categories/` : '/categories/';
     const response = await fetch(url);
 
     if (!response.ok) {
@@ -408,60 +441,54 @@ export const fetchCategories = async () => {
  */
 export const fetchInventoryStatsByCategory = async (userId, categoryId) => {
   try {
-    // Get profile and calculate stats from items field
-    const url = API_BASE_URL 
-      ? `${API_BASE_URL}/profiles?user_id=${userId}`
-      : `/profiles?user_id=${userId}`;
+    // Reuse getUserInventory which has caching and deduplication
+    const inventory = await getUserInventory(userId);
     
-    const headers = await getAuthHeaders();
-    const response = await fetch(url, { headers });
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        return { totalCardsOwned: 0, uniqueCardsOwned: 0, totalUniqueProducts: 0 };
-      }
-      throw new Error(`Failed to fetch profile: ${response.status} ${response.statusText}`);
-    }
-
-    const profile = await response.json();
-    const items = profile.items || {};
+    // Convert inventory map back to items object format for stats calculation
+    const items = {};
+    Object.entries(inventory).forEach(([productId, quantity]) => {
+      items[productId] = quantity;
+    });
     
     // Calculate stats from items
     const totalCardsOwned = Object.values(items).reduce((sum, qty) => sum + (qty || 0), 0);
     const uniqueCardsOwned = Object.keys(items).length;
     
-    // Get total unique products in category (would need separate call, but for now return what we have)
-    // This might need to be fetched separately or included in profile response
+    // Return stats along with items so they can be reused
     return {
       totalCardsOwned,
       uniqueCardsOwned,
-      totalUniqueProducts: 0 // Would need to fetch from products/count endpoint
+      totalUniqueProducts: 0, // Would need to fetch from products/count endpoint
+      items // Include items so they can be reused to avoid duplicate profile fetches
     };
   } catch (error) {
     console.error('Error fetching inventory stats:', error);
-    return { totalCardsOwned: 0, uniqueCardsOwned: 0, totalUniqueProducts: 0 };
+    return { totalCardsOwned: 0, uniqueCardsOwned: 0, totalUniqueProducts: 0, items: {} };
   }
 };
 
 /**
  * Fetch total product counts by category
+ * Uses the filter endpoint with minimal data (limit=1) to get just the total count
  * @param {number} categoryId - Category ID
  * @returns {Promise<number>} Total product count
  */
 export const fetchProductCountsByCategory = async (categoryId) => {
   try {
-    const url = API_BASE_URL 
-      ? `${API_BASE_URL}/products/count?category_id=${categoryId}`
-      : `/products/count?category_id=${categoryId}`;
-    
-    const response = await fetch(url);
+    // Use filter endpoint with minimal limit to get total count efficiently
+    const response = await filterProducts({
+      category_id: categoryId,
+      filters: {},
+      page: 1,
+      limit: 1 // Only need 1 item to get the total count
+    });
 
-    if (!response.ok) {
-      return 0;
+    // Extract total from response
+    if (response && typeof response === 'object') {
+      return response.total || response.count || 0;
     }
-
-    const data = await response.json();
-    return data.count || data.total || 0;
+    
+    return 0;
   } catch (error) {
     console.error('Error fetching product counts:', error);
     return 0;
@@ -473,34 +500,62 @@ export const fetchProductCountsByCategory = async (categoryId) => {
  * @param {string} userId - User ID
  * @returns {Promise<Object>} Map of product_id to quantity
  */
+// Cache and request deduplication for profiles
+const profileCache = {};
+const profilePromises = {};
+
 export const getUserInventory = async (userId) => {
   try {
+    const cacheKey = `profile_${userId}`;
+    
+    // Return cached data if available (with longer TTL - 30 seconds)
+    if (profileCache[cacheKey] && Date.now() - profileCache[cacheKey].timestamp < 30000) {
+      return profileCache[cacheKey].data;
+    }
+    
+    // If there's already an in-flight request, return that promise
+    if (profilePromises[cacheKey]) {
+      return await profilePromises[cacheKey];
+    }
+    
     const url = API_BASE_URL 
-      ? `${API_BASE_URL}/profiles?user_id=${userId}`
-      : `/profiles?user_id=${userId}`;
+      ? `${API_BASE_URL}/profiles/?user_id=${userId}`
+      : `/profiles/?user_id=${userId}`;
     
     const headers = await getAuthHeaders();
-    const response = await fetch(url, { headers });
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        return {};
+    const fetchPromise = fetch(url, { headers }).then(async (response) => {
+      if (!response.ok) {
+        if (response.status === 404) {
+          return {};
+        }
+        throw new Error(`Failed to fetch profile: ${response.status} ${response.statusText}`);
       }
-      throw new Error(`Failed to fetch profile: ${response.status} ${response.statusText}`);
-    }
 
-    const profile = await response.json();
-    
-    // Extract items field from profile object
-    if (profile && typeof profile === 'object' && profile.items) {
-      const inventoryMap = {};
-      Object.entries(profile.items).forEach(([productId, quantity]) => {
-        inventoryMap[String(productId)] = quantity;
-      });
+      const profile = await response.json();
+      
+      // Extract items field from profile object
+      let inventoryMap = {};
+      if (profile && typeof profile === 'object' && profile.items) {
+        Object.entries(profile.items).forEach(([productId, quantity]) => {
+          inventoryMap[String(productId)] = quantity;
+        });
+      }
+      
+      // Cache the result
+      profileCache[cacheKey] = { data: inventoryMap, timestamp: Date.now() };
       return inventoryMap;
-    }
-
-    return {};
+    }).catch((error) => {
+      console.error('Error fetching user inventory:', error);
+      return {};
+    }).finally(() => {
+      // Remove from in-flight promises
+      delete profilePromises[cacheKey];
+    });
+    
+    // Store the promise to deduplicate concurrent requests
+    profilePromises[cacheKey] = fetchPromise;
+    
+    return await fetchPromise;
   } catch (error) {
     console.error('Error fetching user inventory:', error);
     return {};
@@ -516,8 +571,8 @@ export const getUserInventory = async (userId) => {
 export const updateInventoryItems = async (userId, items) => {
   try {
     const url = API_BASE_URL 
-      ? `${API_BASE_URL}/profiles?user_id=${userId}`
-      : `/profiles?user_id=${userId}`;
+      ? `${API_BASE_URL}/profiles/?user_id=${userId}`
+      : `/profiles/?user_id=${userId}`;
     
     const headers = await getAuthHeaders();
     
@@ -583,8 +638,8 @@ export const deleteInventoryItems = async (userId, productIds) => {
   try {
     // First, get current profile to get existing items
     const url = API_BASE_URL 
-      ? `${API_BASE_URL}/profiles?user_id=${userId}`
-      : `/profiles?user_id=${userId}`;
+      ? `${API_BASE_URL}/profiles/?user_id=${userId}`
+      : `/profiles/?user_id=${userId}`;
     
     const headers = await getAuthHeaders();
     
@@ -647,9 +702,25 @@ export const bulkUpdateInventory = async (userId, items) => {
  * @param {number} categoryId - Optional category ID to filter by
  * @returns {Promise<Array>} Array of deck list objects
  */
+// Cache and request deduplication for deck lists
+const deckListsCache = {};
+const deckListsPromises = {};
+
 export const fetchDeckLists = async (userId, categoryId = null) => {
   try {
-    let url = API_BASE_URL ? `${API_BASE_URL}/deck-lists` : '/deck-lists';
+    const cacheKey = `user_${userId}_cat_${categoryId || 'all'}`;
+    
+    // Return cached data if available (with longer TTL - 30 seconds)
+    if (deckListsCache[cacheKey] && Date.now() - deckListsCache[cacheKey].timestamp < 30000) {
+      return deckListsCache[cacheKey].data;
+    }
+    
+    // If there's already an in-flight request, return that promise
+    if (deckListsPromises[cacheKey]) {
+      return await deckListsPromises[cacheKey];
+    }
+    
+    let url = API_BASE_URL ? `${API_BASE_URL}/deck-lists/` : '/deck-lists/';
     
     const params = new URLSearchParams();
     params.append('user_id', userId);
@@ -662,37 +733,53 @@ export const fetchDeckLists = async (userId, categoryId = null) => {
     console.log('Fetching deck lists from:', url);
     
     const headers = await getAuthHeaders();
-    const response = await fetch(url, { headers });
-    
-    if (!response.ok) {
-      if (response.status === 404) {
-        return [];
+    const fetchPromise = fetch(url, { headers }).then(async (response) => {
+      if (!response.ok) {
+        if (response.status === 404) {
+          return [];
+        }
+        throw new Error(`Failed to fetch deck lists: ${response.status} ${response.statusText}`);
       }
-      throw new Error(`Failed to fetch deck lists: ${response.status} ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    console.log('Deck lists API response:', data);
-    
-    // Handle different response formats
-    if (data && typeof data === 'object') {
-      if (data.deck_lists && Array.isArray(data.deck_lists)) {
-        return data.deck_lists;
+      
+      const data = await response.json();
+      console.log('Deck lists API response:', data);
+      
+      // Handle different response formats
+      let result = [];
+      if (data && typeof data === 'object') {
+        if (data.deck_lists && Array.isArray(data.deck_lists)) {
+          result = data.deck_lists;
+        } else if (data.data && Array.isArray(data.data)) {
+          result = data.data;
+        } else if (Array.isArray(data)) {
+          result = data;
+        }
       }
-      if (data.data && Array.isArray(data.data)) {
-        return data.data;
-      }
-      if (Array.isArray(data)) {
-        return data;
-      }
-    }
+      
+      // Cache the result
+      deckListsCache[cacheKey] = { data: result, timestamp: Date.now() };
+      return result;
+    }).catch((error) => {
+      console.error('Error fetching deck lists:', error);
+      return [];
+    }).finally(() => {
+      // Remove from in-flight promises
+      delete deckListsPromises[cacheKey];
+    });
     
-    return [];
+    // Store the promise to deduplicate concurrent requests
+    deckListsPromises[cacheKey] = fetchPromise;
+    
+    return await fetchPromise;
   } catch (error) {
     console.error('Error fetching deck lists:', error);
     return [];
   }
 };
+
+// Cache and request deduplication for all deck lists
+const allDeckListsCache = {};
+const allDeckListsPromises = {};
 
 /**
  * Fetch all deck lists (for all users)
@@ -701,7 +788,19 @@ export const fetchDeckLists = async (userId, categoryId = null) => {
  */
 export const fetchAllDeckLists = async (categoryId = null) => {
   try {
-    let url = API_BASE_URL ? `${API_BASE_URL}/deck-lists` : '/deck-lists';
+    const cacheKey = `all_cat_${categoryId || 'all'}`;
+    
+    // Return cached data if available (with longer TTL - 30 seconds)
+    if (allDeckListsCache[cacheKey] && Date.now() - allDeckListsCache[cacheKey].timestamp < 30000) {
+      return allDeckListsCache[cacheKey].data;
+    }
+    
+    // If there's already an in-flight request, return that promise
+    if (allDeckListsPromises[cacheKey]) {
+      return await allDeckListsPromises[cacheKey];
+    }
+    
+    let url = API_BASE_URL ? `${API_BASE_URL}/deck-lists/` : '/deck-lists/';
     
     const params = new URLSearchParams();
     // Don't include user_id to get all decks
@@ -716,32 +815,44 @@ export const fetchAllDeckLists = async (categoryId = null) => {
     console.log('Fetching all deck lists from:', url);
     
     const headers = await getAuthHeaders();
-    const response = await fetch(url, { headers });
-    
-    if (!response.ok) {
-      if (response.status === 404) {
-        return [];
+    const fetchPromise = fetch(url, { headers }).then(async (response) => {
+      if (!response.ok) {
+        if (response.status === 404) {
+          return [];
+        }
+        throw new Error(`Failed to fetch deck lists: ${response.status} ${response.statusText}`);
       }
-      throw new Error(`Failed to fetch deck lists: ${response.status} ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    console.log('All deck lists API response:', data);
-    
-    // Handle different response formats
-    if (data && typeof data === 'object') {
-      if (data.deck_lists && Array.isArray(data.deck_lists)) {
-        return data.deck_lists;
+      
+      const data = await response.json();
+      console.log('All deck lists API response:', data);
+      
+      // Handle different response formats
+      let result = [];
+      if (data && typeof data === 'object') {
+        if (data.deck_lists && Array.isArray(data.deck_lists)) {
+          result = data.deck_lists;
+        } else if (data.data && Array.isArray(data.data)) {
+          result = data.data;
+        } else if (Array.isArray(data)) {
+          result = data;
+        }
       }
-      if (data.data && Array.isArray(data.data)) {
-        return data.data;
-      }
-      if (Array.isArray(data)) {
-        return data;
-      }
-    }
+      
+      // Cache the result
+      allDeckListsCache[cacheKey] = { data: result, timestamp: Date.now() };
+      return result;
+    }).catch((error) => {
+      console.error('Error fetching all deck lists:', error);
+      return [];
+    }).finally(() => {
+      // Remove from in-flight promises
+      delete allDeckListsPromises[cacheKey];
+    });
     
-    return [];
+    // Store the promise to deduplicate concurrent requests
+    allDeckListsPromises[cacheKey] = fetchPromise;
+    
+    return await fetchPromise;
   } catch (error) {
     console.error('Error fetching all deck lists:', error);
     return [];
@@ -796,7 +907,7 @@ export const fetchDeckList = async (deckListId, userId = null) => {
  */
 export const createDeckList = async (userId, categoryId, name, items = {}) => {
   try {
-    const url = API_BASE_URL ? `${API_BASE_URL}/deck-lists` : '/deck-lists';
+    const url = API_BASE_URL ? `${API_BASE_URL}/deck-lists/` : '/deck-lists/';
     
     const requestBody = {
       user_id: userId,
@@ -1008,6 +1119,10 @@ export const deleteDeckListItems = async (deckListId, userId, productIds) => {
   }
 };
 
+// Cache for category rules to avoid duplicate fetches
+const categoryRulesCache = {};
+const categoryRulesPromises = {}; // Track in-flight requests to deduplicate
+
 /**
  * Fetch category rules
  * @param {number} categoryId - Optional category ID to filter rules
@@ -1015,6 +1130,20 @@ export const deleteDeckListItems = async (deckListId, userId, productIds) => {
  */
 export const fetchCategoryRules = async (categoryId = null) => {
   try {
+    // Use cache key: null for all rules, or the categoryId for specific rules
+    const cacheKey = categoryId === null ? 'all' : String(categoryId);
+    
+    // Return cached data if available
+    if (categoryRulesCache[cacheKey]) {
+      return categoryRulesCache[cacheKey];
+    }
+    
+    // If there's already an in-flight request, return that promise
+    if (categoryRulesPromises[cacheKey]) {
+      return await categoryRulesPromises[cacheKey];
+    }
+    
+    // Create new request
     let url = API_BASE_URL ? `${API_BASE_URL}/categories/rules` : '/categories/rules';
     
     // Add category_id as query parameter if provided
@@ -1023,24 +1152,40 @@ export const fetchCategoryRules = async (categoryId = null) => {
       url = `${url}${separator}category_id=${categoryId}`;
     }
     
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        return [];
+    const fetchPromise = fetch(url).then(async (response) => {
+      if (!response.ok) {
+        if (response.status === 404) {
+          return [];
+        }
+        throw new Error(`Failed to fetch category rules: ${response.status} ${response.statusText}`);
       }
-      throw new Error(`Failed to fetch category rules: ${response.status} ${response.statusText}`);
-    }
 
-    const data = await response.json();
-    // API returns a single object when category_id is provided, or array when not
-    if (categoryId !== null && categoryId !== undefined) {
-      // Single object response
-      return data;
-    } else {
-      // Array response when no category_id
-      return data.rules || data.data || (Array.isArray(data) ? data : []);
-    }
+      const data = await response.json();
+      // API returns a single object when category_id is provided, or array when not
+      let result;
+      if (categoryId !== null && categoryId !== undefined) {
+        // Single object response
+        result = data;
+      } else {
+        // Array response when no category_id
+        result = data.rules || data.data || (Array.isArray(data) ? data : []);
+      }
+      
+      // Cache the result
+      categoryRulesCache[cacheKey] = result;
+      return result;
+    }).catch((error) => {
+      console.error('Error fetching category rules:', error);
+      return [];
+    }).finally(() => {
+      // Remove from in-flight promises
+      delete categoryRulesPromises[cacheKey];
+    });
+    
+    // Store the promise to deduplicate concurrent requests
+    categoryRulesPromises[cacheKey] = fetchPromise;
+    
+    return await fetchPromise;
   } catch (error) {
     console.error('Error fetching category rules:', error);
     return [];
@@ -1083,8 +1228,8 @@ export const fetchGroupsByCategory = async (categoryId) => {
 export const fetchUserProfile = async (userId) => {
   try {
     const url = API_BASE_URL 
-      ? `${API_BASE_URL}/profiles?user_id=${userId}`
-      : `/profiles?user_id=${userId}`;
+      ? `${API_BASE_URL}/profiles/?user_id=${userId}`
+      : `/profiles/?user_id=${userId}`;
     
     const headers = await getAuthHeaders();
     const response = await fetch(url, { headers });
@@ -1112,8 +1257,8 @@ export const fetchUserProfile = async (userId) => {
 export const updateUserCurrency = async (userId, currency) => {
   try {
     const url = API_BASE_URL 
-      ? `${API_BASE_URL}/profiles?user_id=${userId}`
-      : `/profiles?user_id=${userId}`;
+      ? `${API_BASE_URL}/profiles/?user_id=${userId}`
+      : `/profiles/?user_id=${userId}`;
     
     const headers = await getAuthHeaders();
     

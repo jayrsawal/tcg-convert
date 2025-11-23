@@ -24,6 +24,7 @@ class ProfileUpdate(BaseModel):
     total_count: Optional[int] = Field(None, description="Total inventory count (auto-calculated, but can be set manually)")
 
 
+@router.get("")
 @router.get("/")
 async def get_profile(
     user_id: str = Query(..., description="User ID (UUID) to get profile for"),
@@ -58,6 +59,7 @@ async def get_profile(
         raise HTTPException(status_code=500, detail=f"Error fetching profile: {str(e)}")
 
 
+@router.post("")
 @router.post("/")
 async def update_profile(
     profile_update: ProfileUpdate = Body(...),

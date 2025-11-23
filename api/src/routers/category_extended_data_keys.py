@@ -9,6 +9,7 @@ from src.models import PaginationParams, PaginatedResponse
 router = APIRouter(prefix="/category-extended-data-keys", tags=["category-extended-data-keys"])
 
 
+@router.get("", response_model=PaginatedResponse[dict])
 @router.get("/", response_model=PaginatedResponse[dict])
 async def list_category_extended_data_keys(
     pagination: PaginationParams = Depends(),

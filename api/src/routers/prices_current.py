@@ -19,6 +19,7 @@ class BulkPriceRequest(BaseModel):
     product_ids: List[int] = Field(..., min_items=1, max_items=1000, description="List of product IDs to fetch")
 
 
+@router.get("")
 @router.get("/")
 async def list_prices_current(
     db: Client = Depends(get_db_client)

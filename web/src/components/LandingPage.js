@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useCurrency } from '../contexts/CurrencyContext';
 import { fetchCategories, fetchInventoryStatsByCategory, fetchProductCountsByCategory, fetchCurrentPricesBulk } from '../lib/api';
 import { getUserInventory } from '../lib/inventory';
 import NavigationBar from './NavigationBar';
@@ -47,7 +46,7 @@ const LandingPage = () => {
 
   const loadInventoryStats = useCallback(async () => {
     if (!user || !category) {
-      return;
+      return null;
     }
 
     try {
@@ -60,7 +59,7 @@ const LandingPage = () => {
           uniqueCardsOwned: 0,
           totalUniqueProducts: 0
         });
-        return;
+        return null;
       }
       
       // Fetch inventory stats and product counts in parallel
@@ -69,36 +68,22 @@ const LandingPage = () => {
         fetchProductCountsByCategory(categoryId)
       ]);
 
-      // Handle response format - could be single object or array
-      let stat = null;
-      let productCount = null;
+      // Handle response format - statsData is an object with totalCardsOwned, uniqueCardsOwned, items
+      const stat = statsData || {};
       
-      if (Array.isArray(statsData)) {
-        stat = statsData.find(s => {
-          const catId = parseInt(s.category_id || s.categoryId || s.id, 10);
-          return catId === categoryId;
-        });
-      } else if (statsData && (statsData.category_id || statsData.categoryId)) {
-        stat = statsData;
-      }
-      
-      if (Array.isArray(productCountsData)) {
-        productCount = productCountsData.find(c => {
-          const catId = parseInt(c.category_id || c.categoryId || c.id, 10);
-          return catId === categoryId;
-        });
-      } else if (productCountsData && typeof productCountsData === 'number') {
-        // If it's just a number, use it directly
-        productCount = { total_products: productCountsData, totalProducts: productCountsData };
-      } else if (productCountsData && (productCountsData.category_id || productCountsData.categoryId)) {
-        productCount = productCountsData;
-      }
+      // productCountsData is now an object from filterProducts with { total, data, page, limit, has_more }
+      const totalUniqueProducts = (productCountsData && typeof productCountsData === 'object' && 'total' in productCountsData)
+        ? productCountsData.total
+        : (typeof productCountsData === 'number' ? productCountsData : 0);
 
       setCategoryStats({
-        totalCardsOwned: stat?.total_cards || stat?.totalCards || 0,
-        uniqueCardsOwned: stat?.unique_cards || stat?.uniqueCards || 0,
-        totalUniqueProducts: productCount?.total_products || productCount?.totalProducts || productCountsData || 0
+        totalCardsOwned: stat.totalCardsOwned || 0,
+        uniqueCardsOwned: stat.uniqueCardsOwned || 0,
+        totalUniqueProducts
       });
+
+      // Return statsData so items can be reused
+      return statsData;
     } catch (err) {
       console.error('Error loading inventory stats:', err);
       setCategoryStats({
@@ -106,17 +91,21 @@ const LandingPage = () => {
         uniqueCardsOwned: 0,
         totalUniqueProducts: 0
       });
+      return null;
     }
   }, [user, category]);
 
-  const loadInventoryValue = useCallback(async () => {
+  const loadInventoryValue = useCallback(async (inventoryItems = null) => {
     if (!user) {
       return;
     }
 
     try {
-      // Get user's inventory
-      const inventory = await getUserInventory(user.id);
+      // Use provided inventory items if available, otherwise fetch
+      let inventory = inventoryItems;
+      if (!inventory) {
+        inventory = await getUserInventory(user.id);
+      }
       
       // Get product IDs from inventory
       const productIds = Object.keys(inventory)
@@ -160,8 +149,18 @@ const LandingPage = () => {
 
   useEffect(() => {
     if (user && category) {
-      loadInventoryStats();
-      loadInventoryValue();
+      // Load stats first, then use the items from stats to load value (optimize API calls)
+      loadInventoryStats().then((statsResult) => {
+        // If statsResult has items, use them to avoid duplicate profile fetch
+        if (statsResult && statsResult.items) {
+          loadInventoryValue(statsResult.items);
+        } else {
+          loadInventoryValue();
+        }
+      }).catch(() => {
+        // If stats fails, still try to load value
+        loadInventoryValue();
+      });
     }
   }, [user, category, loadInventoryStats, loadInventoryValue]);
 
@@ -250,6 +249,7 @@ const LandingPage = () => {
             maxDecks={4}
             sortBy="recent"
             fetchAllUsers={true}
+            skipPricing={true}
           />
         </div>
 
@@ -264,6 +264,7 @@ const LandingPage = () => {
               maxDecks={3}
               sortBy="recent"
               addDeckRedirect="/deck-lists"
+              skipPricing={true}
             />
           </div>
         )}

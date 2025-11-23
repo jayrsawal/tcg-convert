@@ -6,19 +6,38 @@ import DecksSection from './DecksSection';
 import './DeckListsPage.css';
 
 const DeckListsPage = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [selectedCategoryId] = useState(86); // Default to category 86
   const [loading] = useState(false);
   const [error] = useState(null);
 
   useEffect(() => {
-    if (!user) {
+    // Only redirect if auth has finished loading and user is still null
+    if (!authLoading && !user) {
       navigate('/login');
       return;
     }
-  }, [user, navigate]);
+  }, [user, authLoading, navigate]);
 
+  // Show loading state while checking authentication
+  if (authLoading) {
+    return (
+      <div className="deck-lists-page">
+        <NavigationBar className="deck-lists-header" />
+        <main className="deck-lists-main">
+          <div className="deck-lists-container">
+            <div className="loading-state">
+              <div className="spinner"></div>
+              <p>Loading...</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Redirect if not authenticated (after loading is complete)
   if (!user) {
     return null; // Will redirect to login
   }

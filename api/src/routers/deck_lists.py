@@ -40,6 +40,7 @@ def calculate_card_count(items: Dict[str, int]) -> int:
     return sum(items.values()) if items else 0
 
 
+@router.get("", response_model=PaginatedResponse[dict])
 @router.get("/", response_model=PaginatedResponse[dict])
 async def list_deck_lists(
     pagination: PaginationParams = Depends(),
@@ -107,6 +108,7 @@ async def list_deck_lists(
         raise HTTPException(status_code=500, detail=f"Error fetching deck lists: {str(e)}")
 
 
+@router.post("")
 @router.post("/")
 async def create_deck_list(
     deck_list: DeckListCreate = Body(...),

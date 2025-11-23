@@ -28,6 +28,7 @@ def calculate_total_count(items: Dict[str, int]) -> int:
     return sum(items.values()) if items else 0
 
 
+@router.get("")
 @router.get("/")
 async def get_inventory(
     user_id: Optional[str] = Query(None, description="Filter by user_id (UUID). Public read access - no authentication required."),

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchDeckLists, fetchAllDeckLists, createDeckList, updateDeckListName, deleteDeckList, fetchDeckList, fetchProductsBulk, extractExtendedDataFromProduct, fetchCurrentPricesBulk, fetchCategoryRules } from '../lib/api';
 import ExportDeckModal from './ExportDeckModal';
@@ -6,7 +6,7 @@ import NotificationModal from './NotificationModal';
 import ConfirmationModal from './ConfirmationModal';
 import './DeckListsPage.css';
 
-const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true, maxDecks = null, sortBy = null, fetchAllUsers = false, addDeckRedirect = null }) => {
+const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true, maxDecks = null, sortBy = null, fetchAllUsers = false, addDeckRedirect = null, skipPricing = false }) => {
   const navigate = useNavigate();
   const [deckLists, setDeckLists] = useState([]);
   const [loadingDecks, setLoadingDecks] = useState(false);
@@ -21,11 +21,19 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
   const [deckMetadata, setDeckMetadata] = useState({});
   const [notification, setNotification] = useState({ isOpen: false, title: '', message: '', type: 'info' });
   const [confirmation, setConfirmation] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+  
+  // Guard to prevent duplicate API calls
+  const loadingDecksRef = useRef(false);
+  const lastLoadParamsRef = useRef(null);
 
   const loadDeckMetadata = useCallback(async (decks) => {
     if (!decks || decks.length === 0) return;
     
     const metadataMap = {};
+    
+    // First pass: collect all product IDs from all decks
+    const allProductIdsSet = new Set();
+    const deckProductMap = {}; // Map deckId to its product IDs
     
     for (const deck of decks) {
       const deckId = deck.deck_list_id || deck.id;
@@ -44,28 +52,58 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
         continue;
       }
       
-      try {
-        const [products, prices] = await Promise.all([
-          fetchProductsBulk(productIds),
-          fetchCurrentPricesBulk(productIds).catch(err => {
-            console.warn(`Failed to fetch prices for deck ${deckId}, continuing without prices:`, err);
+      deckProductMap[deckId] = productIds;
+      productIds.forEach(id => allProductIdsSet.add(id));
+    }
+    
+    // Batch fetch all products and prices at once
+    const allProductIds = Array.from(allProductIdsSet);
+    if (allProductIds.length === 0) {
+      setDeckMetadata(metadataMap);
+      return;
+    }
+    
+    try {
+      // Skip pricing if skipPricing prop is true (e.g., for landing page)
+      const fetchPromises = [fetchProductsBulk(allProductIds)];
+      if (!skipPricing) {
+        fetchPromises.push(
+          fetchCurrentPricesBulk(allProductIds).catch(err => {
+            console.warn('Failed to fetch prices for decks, continuing without prices:', err);
             return {};
           })
-        ]);
+        );
+      }
+      
+      const results = await Promise.all(fetchPromises);
+      const allProducts = results[0];
+      const allPrices = skipPricing ? {} : results[1];
+      
+      // Create a map of productId to product for quick lookup
+      const productMap = {};
+      if (Array.isArray(allProducts)) {
+        allProducts.forEach(product => {
+          const productId = product.product_id || product.id;
+          if (productId) {
+            productMap[productId] = product;
+          }
+        });
+      }
+      
+      // Second pass: process each deck using the batched data
+      for (const deck of decks) {
+        const deckId = deck.deck_list_id || deck.id;
+        if (!deckProductMap[deckId]) continue;
         
+        const productIds = deckProductMap[deckId];
         const colorCounts = {};
         let marketValue = 0;
         let highestLevel = -1;
         let highestLevelCardImage = null;
         
-        if (!Array.isArray(products) || products.length === 0) {
-          console.warn(`No products found for deck ${deckId}`);
-          metadataMap[deckId] = { colorCounts: {}, marketValue: 0, backgroundImage: null };
-          continue;
-        }
-        
-        products.forEach(product => {
-          const productId = String(product.product_id || product.id);
+        productIds.forEach(productIdInt => {
+          const productId = String(productIdInt);
+          const product = productMap[productIdInt];
           const quantity = deck.items[productId] || 0;
           
           if (!product || quantity <= 0) return;
@@ -110,20 +148,29 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
             }
           }
           
-          const price = prices[parseInt(productId, 10)];
-          const marketPrice = price?.market_price || price?.marketPrice;
-          if (marketPrice !== null && marketPrice !== undefined) {
-            const priceNum = typeof marketPrice === 'number' ? marketPrice : parseFloat(marketPrice);
-            if (!isNaN(priceNum)) {
-              marketValue += priceNum * quantity;
+          // Only calculate market value if pricing is enabled
+          if (!skipPricing) {
+            const price = allPrices[productIdInt];
+            const marketPrice = price?.market_price || price?.marketPrice;
+            if (marketPrice !== null && marketPrice !== undefined) {
+              const priceNum = typeof marketPrice === 'number' ? marketPrice : parseFloat(marketPrice);
+              if (!isNaN(priceNum)) {
+                marketValue += priceNum * quantity;
+              }
             }
           }
         });
         
         metadataMap[deckId] = { colorCounts, marketValue, backgroundImage: highestLevelCardImage };
-      } catch (err) {
-        console.error(`Error loading metadata for deck ${deckId}:`, err);
-        metadataMap[deckId] = { colorCounts: {}, marketValue: 0, backgroundImage: null };
+      }
+    } catch (err) {
+      console.error('Error loading deck metadata:', err);
+      // Set empty metadata for all decks on error
+      for (const deck of decks) {
+        const deckId = deck.deck_list_id || deck.id;
+        if (!metadataMap[deckId]) {
+          metadataMap[deckId] = { colorCounts: {}, marketValue: 0, backgroundImage: null };
+        }
       }
     }
     
@@ -133,6 +180,21 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
   const loadDeckLists = useCallback(async (catId) => {
     // If fetching all users' decks, don't require user
     if (!fetchAllUsers && !user) return;
+    
+    // Create a unique key for this load request
+    const loadKey = `${fetchAllUsers ? 'all' : user?.id}_${catId}_${sortBy}_${maxDecks}`;
+    
+    // Prevent duplicate calls with the same parameters
+    if (loadingDecksRef.current) {
+      if (lastLoadParamsRef.current === loadKey) {
+        // Same parameters, skip (cache will handle the API call)
+        return;
+      }
+      // Different parameters, let it proceed (will be deduplicated by API cache if same API call)
+    }
+    
+    loadingDecksRef.current = true;
+    lastLoadParamsRef.current = loadKey;
     
     try {
       setLoadingDecks(true);
@@ -170,8 +232,9 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
       setDeckLists([]);
     } finally {
       setLoadingDecks(false);
+      loadingDecksRef.current = false;
     }
-  }, [user, fetchAllUsers, sortBy, maxDecks, loadDeckMetadata]);
+  }, [user, fetchAllUsers, sortBy, maxDecks, loadDeckMetadata, skipPricing]);
 
   useEffect(() => {
     if ((fetchAllUsers || user) && categoryId !== null) {
@@ -179,7 +242,8 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
     } else {
       setDeckLists([]);
     }
-  }, [user, categoryId, sortBy, maxDecks, fetchAllUsers, loadDeckLists]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, categoryId, sortBy, maxDecks, fetchAllUsers]); // Only depend on primitive values, not the callback
 
   useEffect(() => {
     loadCategoryRules();
@@ -615,7 +679,7 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
                                 }
                               })()}
                             </div>
-                            {(() => {
+                            {!skipPricing && (() => {
                               const metadata = deckMetadata[deckId];
                               const marketValue = metadata?.marketValue || 0;
                               

@@ -11,6 +11,7 @@ from src.models import PaginationParams, PaginatedResponse
 router = APIRouter(prefix="/prices-history", tags=["prices-history"])
 
 
+@router.get("", response_model=PaginatedResponse[dict])
 @router.get("/", response_model=PaginatedResponse[dict])
 async def list_prices_history(
     pagination: PaginationParams = Depends(),

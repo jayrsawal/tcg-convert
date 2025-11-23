@@ -11,6 +11,7 @@ from src.models import PaginationParams, PaginatedResponse
 router = APIRouter(prefix="/product-extended-data", tags=["product-extended-data"])
 
 
+@router.get("", response_model=PaginatedResponse[dict])
 @router.get("/", response_model=PaginatedResponse[dict])
 async def list_product_extended_data(
     pagination: PaginationParams = Depends(),

@@ -7,7 +7,7 @@ import NavigationBar from './NavigationBar';
 import './ProfilePage.css';
 
 const ProfilePage = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { selectedCurrency, setSelectedCurrency } = useCurrency();
   const navigate = useNavigate();
   const [currency, setCurrency] = useState(selectedCurrency.toUpperCase());
@@ -17,8 +17,14 @@ const ProfilePage = () => {
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
-    if (!user) {
+    // Only redirect if auth has finished loading and user is still null
+    if (!authLoading && !user) {
       navigate('/login');
+      return;
+    }
+    
+    // Don't load profile if still checking auth or no user
+    if (authLoading || !user) {
       return;
     }
 
@@ -75,6 +81,21 @@ const ProfilePage = () => {
     }
   };
 
+  // Show loading state while checking authentication
+  if (authLoading) {
+    return (
+      <div className="profile-page">
+        <NavigationBar className="profile-header" />
+        <main className="profile-main">
+          <div className="profile-container">
+            <div className="profile-loading">Loading...</div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Redirect if not authenticated (after loading is complete)
   if (!user) {
     return null; // Will redirect to login
   }

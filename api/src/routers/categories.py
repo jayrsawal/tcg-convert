@@ -10,6 +10,7 @@ from src.models import PaginationParams, PaginatedResponse
 router = APIRouter(prefix="/categories", tags=["categories"])
 
 
+@router.get("", response_model=PaginatedResponse[dict])
 @router.get("/", response_model=PaginatedResponse[dict])
 async def list_categories(
     pagination: PaginationParams = Depends(),

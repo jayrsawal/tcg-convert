@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="TCGHermit API",
     description="Backend API for card deck building and trading app",
-    version="1.0.0"
+    version="1.0.0",
+    redirect_slashes=False  # Disable automatic redirects for trailing slashes
 )
 
 # Add CORS middleware
