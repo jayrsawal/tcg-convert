@@ -31,6 +31,7 @@ export const filterProducts = async (params = {}) => {
       category_id,
       filters = {},
       group_id,
+      numbers,
       sort_by,
       sort_order,
       page = 1,
@@ -67,6 +68,10 @@ export const filterProducts = async (params = {}) => {
     // Add optional parameters if provided
     if (group_id !== null && group_id !== undefined) {
       requestBody.group_id = parseInt(group_id, 10);
+    }
+    if (numbers !== null && numbers !== undefined) {
+      // numbers can be an array of strings or integers
+      requestBody.numbers = Array.isArray(numbers) ? numbers : [numbers];
     }
     if (sort_by) {
       requestBody.sort_by = sort_by;
@@ -802,11 +807,10 @@ export const createDeckList = async (userId, categoryId, name, items = {}) => {
     
     console.log('Creating deck list:', requestBody);
     
+    const headers = await getAuthHeaders();
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(requestBody)
     });
     
@@ -881,8 +885,10 @@ export const deleteDeckList = async (deckListId, userId) => {
     
     console.log('Deleting deck list:', url);
     
+    const headers = await getAuthHeaders();
     const response = await fetch(url, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers
     });
     
     if (!response.ok) {

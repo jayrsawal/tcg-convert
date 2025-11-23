@@ -10,7 +10,7 @@ T = TypeVar('T')
 class PaginationParams(BaseModel):
     """Pagination parameters for list endpoints."""
     page: int = Field(default=1, ge=1, description="Page number (1-indexed)")
-    limit: int = Field(default=100, ge=1, le=1000, description="Number of items per page")
+    limit: int = Field(default=100, ge=1, le=1000, description="Number of items per page (default: 100, max: 1000)")
 
 
 class PaginatedResponse(BaseModel, Generic[T]):

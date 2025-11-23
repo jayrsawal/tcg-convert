@@ -1026,29 +1026,44 @@ const DeckBuilderPage = () => {
         cardNumbersToFind.add(match[2].trim());
       }
     });
+    
+    console.log('[Import Debug] Card numbers to find:', Array.from(cardNumbersToFind));
 
     // Search for all products with these card numbers in the category
-    // Use filterProducts with Number filter to find products by card number
+    // Use filterProducts with numbers parameter to find all products at once
     const allFoundProducts = [];
     const cardNumberToProducts = {}; // { cardNumber: [products] }
 
+    // Initialize empty arrays for all card numbers
+    cardNumbersToFind.forEach(cardNumber => {
+      cardNumberToProducts[cardNumber] = [];
+    });
+
     try {
-      // Search for each card number
-      for (const cardNumber of cardNumbersToFind) {
-        try {
-          // Search for products with this card number using Number filter
+      // Make a single request with all card numbers using the numbers parameter
+      // Handle pagination in case there are more than 1000 results
+      if (cardNumbersToFind.size > 0) {
+        let allProductsData = [];
+        let currentPage = 1;
+        let hasMore = true;
+        const limit = 1000; // Max limit per API specification
+
+        // Fetch all pages of results
+        while (hasMore) {
           const filterParams = {
             category_id: deckList.category_id,
             group_id: null,
-            filters: { Number: [cardNumber] }, // Filter by Number attribute
+            numbers: Array.from(cardNumbersToFind), // Use numbers parameter instead of filters
             sort_by: 'name',
             sort_order: 'asc',
-            page: 1,
-            limit: 1000
+            page: currentPage,
+            limit: limit
           };
 
           const response = await filterProducts(filterParams);
           let productsData = [];
+          let total = 0;
+          let hasMorePages = false;
           
           if (response && typeof response === 'object') {
             if (Array.isArray(response)) {
@@ -1057,51 +1072,148 @@ const DeckBuilderPage = () => {
               productsData = response.products;
             } else if (response.data && Array.isArray(response.data)) {
               productsData = response.data;
+            } else if (response.results && Array.isArray(response.results)) {
+              productsData = response.results;
             }
+            
+            // Check pagination info
+            total = response.total || response.count || productsData.length;
+            hasMorePages = response.has_more !== undefined ? response.has_more : (productsData.length === limit);
           }
 
           if (productsData.length > 0) {
-            // Fetch prices for these products to determine lowest price
-            const productIds = productsData.map(p => p.product_id || p.id).filter(id => id !== undefined && id !== null);
-            let prices = {};
-            if (productIds.length > 0) {
-              try {
-                prices = await fetchCurrentPricesBulk(productIds);
-              } catch (priceErr) {
-                console.warn('Could not fetch prices for import:', priceErr);
-              }
+            allProductsData.push(...productsData);
+          }
+
+          // Check if we need to fetch more pages
+          hasMore = hasMorePages && productsData.length === limit;
+          currentPage++;
+          
+          // Safety limit: don't fetch more than 10 pages (10,000 products max)
+          if (currentPage > 10) {
+            console.warn('Import: Reached pagination limit (10 pages), some products may be missing');
+            break;
+          }
+        }
+
+        if (allProductsData.length > 0) {
+          console.log('[Import Debug] Total products fetched from API:', allProductsData.length);
+          console.log('[Import Debug] Sample products:', allProductsData.slice(0, 3).map(p => ({
+            product_id: p.product_id || p.id,
+            number: p.number || p.Number,
+            name: p.name
+          })));
+          
+          // Fetch prices for all products at once
+          const productIds = allProductsData.map(p => p.product_id || p.id).filter(id => id !== undefined && id !== null);
+          let prices = {};
+          if (productIds.length > 0) {
+            try {
+              prices = await fetchCurrentPricesBulk(productIds);
+            } catch (priceErr) {
+              console.warn('Could not fetch prices for import:', priceErr);
+            }
+          }
+
+          // Normalize card numbers for matching (trim whitespace, handle leading zeros for numeric-only)
+          const normalizeCardNumber = (num) => {
+            if (!num) return null;
+            const str = String(num).trim().toUpperCase();
+            // For numeric-only card numbers, remove leading zeros
+            // For alphanumeric (like "GD01-008"), keep as-is
+            if (/^\d+$/.test(str)) {
+              return str.replace(/^0+/, '') || '0';
+            }
+            return str;
+          };
+
+          // Create a map of normalized card numbers to original card numbers
+          const normalizedCardNumberMap = {};
+          cardNumbersToFind.forEach(originalNumber => {
+            const normalized = normalizeCardNumber(originalNumber);
+            if (!normalizedCardNumberMap[normalized]) {
+              normalizedCardNumberMap[normalized] = [];
+            }
+            normalizedCardNumberMap[normalized].push(originalNumber);
+          });
+
+          // Group products by their number (check both product.number field and extended data)
+          const unmatchedProducts = [];
+          allProductsData.forEach(product => {
+            // First check the product's direct number field
+            let productNumber = product.number || product.Number || null;
+            
+            // If not found, check extended data
+            if (!productNumber) {
+              const extendedData = extractExtendedDataFromProduct(product);
+              extendedData.forEach(item => {
+                const key = (item.key || item.name || '').toUpperCase();
+                if (key === 'NUMBER') {
+                  productNumber = (item.value || item.val || '').trim();
+                }
+              });
             }
 
-            // Store products with their prices
-            const productsWithPrices = productsData.map(product => {
-              const productId = String(product.product_id || product.id);
-              const price = prices[parseInt(productId, 10)];
-              const marketPrice = price?.market_price || price?.marketPrice;
-              return {
-                product,
-                productId,
-                marketPrice: marketPrice !== null && marketPrice !== undefined 
-                  ? (typeof marketPrice === 'number' ? marketPrice : parseFloat(marketPrice))
-                  : Infinity // If no price, treat as highest
-              };
-            });
+            if (productNumber) {
+              // Normalize the product number for matching
+              const normalizedProductNumber = normalizeCardNumber(productNumber);
+              
+              console.log(`[Import Debug] Product ${product.product_id || product.id}: number="${productNumber}", normalized="${normalizedProductNumber}"`);
+              
+              // Check if this normalized number matches any of our card numbers
+              const matchingCardNumbers = normalizedCardNumberMap[normalizedProductNumber];
+              if (matchingCardNumbers && matchingCardNumbers.length > 0) {
+                console.log(`[Import Debug] Matched product ${product.product_id || product.id} to card numbers:`, matchingCardNumbers);
+                // Add to all matching card numbers (in case of duplicates like "001" and "1")
+                matchingCardNumbers.forEach(cardNumber => {
+                  if (cardNumberToProducts.hasOwnProperty(cardNumber)) {
+                    const productId = String(product.product_id || product.id);
+                    const price = prices[parseInt(productId, 10)];
+                    const marketPrice = price?.market_price || price?.marketPrice;
+                    
+                    cardNumberToProducts[cardNumber].push({
+                      product,
+                      productId,
+                      marketPrice: marketPrice !== null && marketPrice !== undefined 
+                        ? (typeof marketPrice === 'number' ? marketPrice : parseFloat(marketPrice))
+                        : Infinity // If no price, treat as highest
+                    });
+                  }
+                });
+              } else {
+                unmatchedProducts.push({
+                  product_id: product.product_id || product.id,
+                  number: productNumber,
+                  normalized: normalizedProductNumber,
+                  name: product.name
+                });
+              }
+            } else {
+              unmatchedProducts.push({
+                product_id: product.product_id || product.id,
+                number: null,
+                normalized: null,
+                name: product.name
+              });
+            }
+          });
+          
+          console.log('[Import Debug] Unmatched products:', unmatchedProducts);
+          console.log('[Import Debug] Normalized card number map:', Object.keys(normalizedCardNumberMap));
+          console.log('[Import Debug] Card numbers with products:', Object.keys(cardNumberToProducts).filter(cn => cardNumberToProducts[cn].length > 0));
+          console.log('[Import Debug] Card numbers without products:', Object.keys(cardNumberToProducts).filter(cn => cardNumberToProducts[cn].length === 0));
 
-            // Sort by market price (lowest first), then by product_id for consistency
-            productsWithPrices.sort((a, b) => {
+          // Sort each card number's products by market price (lowest first), then by product_id for consistency
+          Object.keys(cardNumberToProducts).forEach(cardNumber => {
+            cardNumberToProducts[cardNumber].sort((a, b) => {
               if (a.marketPrice !== b.marketPrice) {
                 return a.marketPrice - b.marketPrice;
               }
               return (a.productId || '').localeCompare(b.productId || '');
             });
+          });
 
-            cardNumberToProducts[cardNumber] = productsWithPrices;
-            allFoundProducts.push(...productsData);
-          } else {
-            cardNumberToProducts[cardNumber] = [];
-          }
-        } catch (searchErr) {
-          console.error(`Error searching for card number ${cardNumber}:`, searchErr);
-          cardNumberToProducts[cardNumber] = [];
+          allFoundProducts.push(...allProductsData);
         }
       }
     } catch (err) {
@@ -1145,9 +1257,13 @@ const DeckBuilderPage = () => {
       // Find products by card number
       const productsWithPrices = cardNumberToProducts[cardNumber];
       if (!productsWithPrices || productsWithPrices.length === 0) {
+        console.log(`[Import Debug] Line ${index + 1}: Card number "${cardNumber}" not found in cardNumberToProducts`);
+        console.log(`[Import Debug] Available card numbers in cardNumberToProducts:`, Object.keys(cardNumberToProducts));
         warnings.push(`Line ${index + 1}: Card number "${cardNumber}" not found in category`);
         return;
       }
+      
+      console.log(`[Import Debug] Line ${index + 1}: Found ${productsWithPrices.length} product(s) for card number "${cardNumber}"`);
 
       // Select product: if multiple, try to match by name first, otherwise use lowest price
       let selectedProduct = productsWithPrices[0];

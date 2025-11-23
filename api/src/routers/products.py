@@ -17,6 +17,7 @@ class ProductFilter(BaseModel):
     """Model for filtering products by extended data key-value pairs."""
     category_id: Optional[int] = None
     group_id: Optional[int] = None
+    numbers: Optional[List[Union[str, int]]] = None  # Filter by number column. Multiple values use OR logic (e.g., ["001", "002", "003"])
     filters: Dict[str, Union[str, List[str]]] = {}  # Key-value pairs for extended data filtering. Single values or lists of values. Multiple values for a key use OR logic, different keys use AND logic (e.g., {"Rarity": ["Common", "Rare"], "Number": "001"})
     sort_by: Optional[str] = "name"  # Sort field: "name" or "product_id"
     sort_order: Optional[str] = "asc"  # Sort order: "asc" or "desc"
@@ -301,19 +302,23 @@ async def filter_products(
     db: Client = Depends(get_db_client)
 ):
     """
-    Filter products by extended data key-value pairs, category, and/or group.
+    Filter products by extended data key-value pairs, category, group, and/or numbers.
     
     **Filter Logic:**
     - Different filter keys are combined with AND logic (e.g., Rarity AND Number)
     - Multiple values for a single key are combined with OR logic (e.g., Rarity=Common OR Rarity=Rare)
     - If category_id is provided, products are filtered by category
     - If group_id is provided, products are filtered by group
+    - If numbers is provided, products are filtered by number column (multiple numbers use OR logic)
+    - All filters (category_id, group_id, numbers, and filters dict) are combined with AND logic
     - Results can be sorted by name or product_id, ascending or descending
     
     **Examples:**
     - {"Rarity": "Common", "Number": "001"} - Products with Rarity=Common AND Number=001
     - {"Rarity": ["Common", "Rare"], "Number": "001"} - Products with (Rarity=Common OR Rarity=Rare) AND Number=001
     - {"Rarity": ["Common", "Rare"], "Number": ["001", "002"]} - Products with (Rarity=Common OR Rarity=Rare) AND (Number=001 OR Number=002)
+    - {"numbers": ["001", "002", "003"]} - Products with number=001 OR number=002 OR number=003
+    - {"numbers": ["001", "002"], "category_id": 5} - Products with (number=001 OR number=002) AND category_id=5
     """
     try:
         # Validate sort parameters
@@ -337,12 +342,11 @@ async def filter_products(
             base_query = base_query.eq("group_id", filter_data.group_id)
         
         # Get candidate product_ids
-
         products_response = base_query.execute()
         candidate_product_ids = [p["product_id"] for p in products_response.data] if products_response.data else []
         
         if not candidate_product_ids:
-            # No products match the category filter
+            # No products match the category/group filter
             return PaginatedResponse(
                 data=[],
                 page=pagination.page,
@@ -350,6 +354,54 @@ async def filter_products(
                 total=0,
                 has_more=False
             )
+        
+        # Apply number filter if provided
+        if filter_data.numbers:
+            # Normalize numbers to strings for comparison (number column is typically stored as string)
+            number_values = [str(num) for num in filter_data.numbers if num is not None]
+            
+            if number_values:
+                try:
+                    # Filter products by number column directly
+                    number_query = (
+                        db.table("products")
+                        .select("product_id")
+                        .in_("product_id", candidate_product_ids)
+                        .in_("number", number_values)
+                        .execute()
+                    )
+                    number_matching_ids = [p["product_id"] for p in number_query.data] if number_query.data else []
+                    candidate_product_ids = number_matching_ids
+                except Exception as num_error:
+                    # If number column doesn't exist or query fails, try filtering through extended_data
+                    error_str = str(num_error).lower()
+                    if "number" in error_str or "column" in error_str:
+                        # Fallback: filter through extended_data table
+                        number_matching_ids = set()
+                        for num_val in number_values:
+                            extended_data_response = (
+                                db.table("product_extended_data")
+                                .select("product_id")
+                                .eq("key", "Number")
+                                .eq("value", num_val)
+                                .in_("product_id", candidate_product_ids)
+                                .execute()
+                            )
+                            val_matching_ids = {item["product_id"] for item in extended_data_response.data if item.get("product_id")}
+                            number_matching_ids = number_matching_ids.union(val_matching_ids)
+                        candidate_product_ids = list(number_matching_ids)
+                    else:
+                        raise
+                
+                if not candidate_product_ids:
+                    # No products match the number filter
+                    return PaginatedResponse(
+                        data=[],
+                        page=pagination.page,
+                        limit=pagination.limit,
+                        total=0,
+                        has_more=False
+                    )
         
         # Apply extended data filters
         if filter_data.filters:
