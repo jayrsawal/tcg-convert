@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { isFavorited, toggleFavorite } from '../lib/favorites';
 import { fetchProductById, extractExtendedDataFromProduct, fetchGroupById, fetchCurrentPrice, fetchPriceHistory } from '../lib/api';
+import NavigationBar from './NavigationBar';
 import NotificationModal from './NotificationModal';
 import './ProductCardPage.css';
 
 const ProductCardPage = () => {
   const { productId } = useParams();
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const [product, setProduct] = useState(null);
   const [group, setGroup] = useState(null);
   const [extendedData, setExtendedData] = useState([]);
@@ -148,25 +149,7 @@ const ProductCardPage = () => {
   if (loading) {
     return (
       <div className="product-card-page">
-        <header className="product-header">
-          <div className="header-content">
-            <Link to="/" className="logo-link">
-              <h1 className="logo">TCGConvert</h1>
-            </Link>
-            <nav className="header-nav">
-              {user ? (
-                <div className="user-menu">
-                  <button onClick={signOut} className="nav-button">Sign Out</button>
-                </div>
-              ) : (
-                <div className="auth-links">
-                  <Link to="/login" className="nav-link">Log In</Link>
-                  <Link to="/signup" className="nav-link nav-link-primary">Sign Up</Link>
-                </div>
-              )}
-            </nav>
-          </div>
-        </header>
+        <NavigationBar className="product-header" />
         <main className="product-main">
           <div className="loading-state">
             <div className="spinner"></div>
@@ -180,25 +163,7 @@ const ProductCardPage = () => {
   if (error || !product) {
     return (
       <div className="product-card-page">
-        <header className="product-header">
-          <div className="header-content">
-            <Link to="/" className="logo-link">
-              <h1 className="logo">TCGConvert</h1>
-            </Link>
-            <nav className="header-nav">
-              {user ? (
-                <div className="user-menu">
-                  <button onClick={signOut} className="nav-button">Sign Out</button>
-                </div>
-              ) : (
-                <div className="auth-links">
-                  <Link to="/login" className="nav-link">Log In</Link>
-                  <Link to="/signup" className="nav-link nav-link-primary">Sign Up</Link>
-                </div>
-              )}
-            </nav>
-          </div>
-        </header>
+        <NavigationBar className="product-header" />
         <main className="product-main">
           <div className="error-state">
             <p className="error-message">⚠️ {error || 'Product not found'}</p>
@@ -251,27 +216,7 @@ const ProductCardPage = () => {
 
   return (
     <div className="product-card-page">
-      <header className="product-header">
-        <div className="header-content">
-          <Link to="/" className="logo-link">
-            <h1 className="logo">TCGConvert</h1>
-          </Link>
-          <nav className="header-nav">
-            {user ? (
-              <div className="user-menu">
-                <Link to="/inventory" className="nav-link">Inventory</Link>
-                <Link to="/deck-lists" className="nav-link">Deck Lists</Link>
-                <button onClick={signOut} className="nav-button">Sign Out</button>
-              </div>
-            ) : (
-              <div className="auth-links">
-                <Link to="/login" className="nav-link">Log In</Link>
-                <Link to="/signup" className="nav-link nav-link-primary">Sign Up</Link>
-              </div>
-            )}
-          </nav>
-        </div>
-      </header>
+      <NavigationBar className="product-header" />
 
       <main className="product-main">
         <div className="product-container">

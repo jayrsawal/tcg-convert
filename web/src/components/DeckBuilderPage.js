@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { getFavorites, toggleFavorite } from '../lib/favorites';
 import { getUserInventory } from '../lib/inventory';
 import { fetchDeckList, updateDeckListName, updateDeckListItems, deleteDeckListItems, fetchCategoryRules } from '../lib/api';
 import { fetchGroupsByCategory, fetchProductExtendedDataKeyValues, filterProducts, searchProducts, fetchProductsBulk, extractExtendedDataFromProduct, fetchCurrentPricesBulk } from '../lib/api';
+import NavigationBar from './NavigationBar';
 import ProductPreviewModal from './ProductPreviewModal';
 import NotificationModal from './NotificationModal';
 import ConfirmationModal from './ConfirmationModal';
@@ -20,7 +21,7 @@ import './DeckBuilderPage.css';
 const DeckBuilderPage = () => {
   const { deckListId } = useParams();
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const { selectedCurrency, setSelectedCurrency, currencyRates, loadingRates } = useCurrency();
   const [deckList, setDeckList] = useState(null);
   const [deckItems, setDeckItems] = useState({}); // { product_id: quantity } - current deck items from server
@@ -442,12 +443,25 @@ const DeckBuilderPage = () => {
     
     try {
       loadingCategoryRulesRef.current = true;
+      console.log('[loadCategoryRules] Fetching rules for category:', deckList.category_id);
       const rulesData = await fetchCategoryRules(deckList.category_id);
+      console.log('[loadCategoryRules] Received rules data:', rulesData);
+      
+      // API returns either an array or a single object
       if (Array.isArray(rulesData) && rulesData.length > 0) {
         setCategoryRules(rulesData[0]);
+        console.log('[loadCategoryRules] Set rules from array:', rulesData[0]);
+      } else if (rulesData && typeof rulesData === 'object' && !Array.isArray(rulesData)) {
+        // Single object response
+        setCategoryRules(rulesData);
+        console.log('[loadCategoryRules] Set rules from object:', rulesData);
+      } else {
+        console.warn('[loadCategoryRules] No rules found or invalid format:', rulesData);
+        setCategoryRules(null);
       }
     } catch (err) {
-      console.error('Error loading category rules:', err);
+      console.error('[loadCategoryRules] Error loading category rules:', err);
+      setCategoryRules(null);
     } finally {
       loadingCategoryRulesRef.current = false;
     }
@@ -478,7 +492,7 @@ const DeckBuilderPage = () => {
       // Extract extended data from products (now included in product objects)
       loadProductExtendedData(allProducts);
       
-      // Fetch prices for all deck products
+      // Fetch prices for all deck products and merge with existing prices
       if (allProducts.length > 0) {
         const productIds = allProducts
           .map(p => p.product_id || p.id)
@@ -487,10 +501,11 @@ const DeckBuilderPage = () => {
         if (productIds.length > 0) {
           try {
             const prices = await fetchCurrentPricesBulk(productIds);
-            setProductPrices(prices);
+            // Merge with existing prices instead of replacing
+            setProductPrices(prev => ({ ...prev, ...prices }));
           } catch (err) {
             console.error('Error loading prices:', err);
-            setProductPrices({});
+            // Don't clear all prices on error, just log it
           }
         }
       }
@@ -769,13 +784,8 @@ const DeckBuilderPage = () => {
               Object.assign(allPrices, prices);
             });
             
-            if (append) {
-              // Merge with existing prices when appending
-              setProductPrices(prev => ({ ...prev, ...allPrices }));
-            } else {
-              // Replace prices when replacing products (new search/filter)
-              setProductPrices(allPrices);
-            }
+            // Always merge prices to preserve prices for deck products even when filtering
+            setProductPrices(prev => ({ ...prev, ...allPrices }));
           } catch (err) {
             console.error('Error loading prices for filtered products:', err);
           }
@@ -1278,14 +1288,6 @@ const DeckBuilderPage = () => {
     historyIndexRef.current = newHistory.length - 1;
   };
 
-  const handleUndo = () => {
-    if (historyIndexRef.current > 0) {
-      historyIndexRef.current -= 1;
-      const previousState = history[historyIndexRef.current];
-      setStagedDeckItems({});
-      setDeckItems(previousState.items);
-    }
-  };
 
   const handleDiscard = () => {
     setConfirmation({
@@ -1572,13 +1574,14 @@ const DeckBuilderPage = () => {
     }));
   };
 
-  const handleSearchChange = (e) => {
-    setSearchQuery(e.target.value);
-  };
+  // Removed unused handlers - search and sort are handled inline
+  // const handleSearchChange = (e) => {
+  //   setSearchQuery(e.target.value);
+  // };
 
-  const handleSortChange = (e) => {
-    setSortOption(e.target.value);
-  };
+  // const handleSortChange = (e) => {
+  //   setSortOption(e.target.value);
+  // };
 
   const navigateWithCheck = (to) => {
     const isOwner = user && deckList && deckList.user_id === user.id;
@@ -1632,62 +1635,7 @@ const DeckBuilderPage = () => {
     return rarity;
   };
 
-  // Get border style based on rarity
-  const getRarityBorderStyle = (rarity) => {
-    if (!rarity) return {};
-    
-    const rarityUpper = rarity.toUpperCase();
-    
-    // LR+ - Orange gold shiny effect (handled via CSS pseudo-element)
-    if (rarityUpper === 'LR+') {
-      return {
-        border: '3px solid transparent',
-        boxShadow: '0 0 20px rgba(255, 165, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.08)'
-      };
-    }
-    
-    // LR - Regular gold shiny effect (handled via CSS pseudo-element)
-    if (rarityUpper === 'LR') {
-      return {
-        border: '3px solid transparent',
-        boxShadow: '0 0 20px rgba(255, 215, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.08)'
-      };
-    }
-    
-    // R+ - Blue border
-    if (rarityUpper === 'R+') {
-      return {
-        border: '3px solid #4299e1',
-        boxShadow: '0 4px 12px rgba(66, 153, 225, 0.3)'
-      };
-    }
-    
-    // R - Faded blue border
-    if (rarityUpper === 'R') {
-      return {
-        border: '3px solid #90cdf4',
-        boxShadow: '0 4px 12px rgba(144, 205, 244, 0.3)'
-      };
-    }
-    
-    // U+ - Blue border
-    if (rarityUpper === 'U+') {
-      return {
-        border: '3px solid #4299e1',
-        boxShadow: '0 4px 12px rgba(66, 153, 225, 0.3)'
-      };
-    }
-    
-    // C+ - Green border
-    if (rarityUpper === 'C+') {
-      return {
-        border: '3px solid #48bb78',
-        boxShadow: '0 4px 12px rgba(72, 187, 120, 0.3)'
-      };
-    }
-    
-    return {};
-  };
+  // Removed unused getRarityBorderStyle function - rarity styling handled via CSS
 
   // Convert color name/text to CSS color value
   const getColorValue = (colorText) => {
@@ -1850,18 +1798,97 @@ const DeckBuilderPage = () => {
     return attributes;
   };
 
+  // Check if a specific product violates max_duplicates rule
+  const checkMaxDuplicatesViolation = (productId, quantity) => {
+    if (!categoryRules) {
+      return false;
+    }
+    if (categoryRules.max_duplicates === null || categoryRules.max_duplicates === undefined) {
+      return false;
+    }
+    const mergedItems = { ...deckItems, ...stagedDeckItems };
+    const currentQuantity = mergedItems[String(productId)] || 0;
+    const violates = currentQuantity > categoryRules.max_duplicates;
+    if (violates) {
+      console.log(`[checkMaxDuplicatesViolation] Product ${productId}: ${currentQuantity} > ${categoryRules.max_duplicates}`);
+    }
+    return violates;
+  };
+
+  // Check if a specific product's extended attributes violate extended_rules
+  const checkExtendedRulesViolation = (productId) => {
+    if (!categoryRules) {
+      return null;
+    }
+    if (!categoryRules.extended_rules || typeof categoryRules.extended_rules !== 'object') {
+      return null; // No extended rules or no violation
+    }
+    
+    const mergedItems = { ...deckItems, ...stagedDeckItems };
+    const extendedRules = categoryRules.extended_rules;
+    const violations = [];
+    
+    // Get this product's extended data
+    const prodExtData = productExtendedData[productId] || [];
+    
+    // Check each extended rule
+    Object.keys(extendedRules).forEach(ruleKey => {
+      const maxUnique = extendedRules[ruleKey];
+      if (maxUnique === null || maxUnique === undefined) return;
+      
+      // Find this product's value for this rule key
+      let productValue = null;
+      prodExtData.forEach(item => {
+        const key = item.key || item.name;
+        const value = item.value || item.val;
+        if (key && value && key.toUpperCase() === ruleKey.toUpperCase()) {
+          productValue = value;
+        }
+      });
+      
+      if (!productValue) return; // This product doesn't have this attribute
+      
+      // Count unique values across all products in deck
+      const uniqueValues = new Set();
+      Object.keys(mergedItems).forEach(pid => {
+        if (mergedItems[pid] <= 0) return;
+        
+        const extData = productExtendedData[pid] || [];
+        extData.forEach(item => {
+          const key = item.key || item.name;
+          const value = item.value || item.val;
+          if (key && value && key.toUpperCase() === ruleKey.toUpperCase()) {
+            uniqueValues.add(value);
+          }
+        });
+      });
+      
+      if (uniqueValues.size > maxUnique) {
+        violations.push({
+          ruleKey,
+          currentCount: uniqueValues.size,
+          maxAllowed: maxUnique
+        });
+      }
+    });
+    
+    return violations.length > 0 ? violations : null;
+  };
+
   // Validate deck against category rules
   const validateDeck = (items) => {
     const errors = [];
-    if (!categoryRules) return errors; // No rules to validate against
+    if (!categoryRules) {
+      console.log('[validateDeck] No category rules available');
+      return errors; // No rules to validate against
+    }
+    
+    console.log('[validateDeck] Validating with rules:', {
+      max_duplicates: categoryRules.max_duplicates,
+      extended_rules: categoryRules.extended_rules
+    });
     
     const mergedItems = { ...items };
-    const totalCards = Object.values(mergedItems)
-      .filter(qty => qty > 0)
-      .reduce((sum, qty) => sum + qty, 0);
-    
-    // Note: Deck size validation removed - users can save decks that exceed the limit
-    // Visual indicators will show when the limit is exceeded
     
     // Validate max_duplicates
     if (categoryRules.max_duplicates !== null && categoryRules.max_duplicates !== undefined) {
@@ -1869,7 +1896,9 @@ const DeckBuilderPage = () => {
         if (quantity > categoryRules.max_duplicates) {
           const product = deckProducts.find(p => String(p.product_id || p.id) === productId);
           const productName = product?.name || `Card ${productId}`;
-          errors.push(`${productName}: ${quantity} copies exceeds maximum of ${categoryRules.max_duplicates}`);
+          const errorMsg = `${productName}: ${quantity} copies exceeds maximum of ${categoryRules.max_duplicates}`;
+          console.log('[validateDeck] Max duplicates violation:', errorMsg);
+          errors.push(errorMsg);
         }
       });
     }
@@ -1877,6 +1906,7 @@ const DeckBuilderPage = () => {
     // Validate extended_rules
     if (categoryRules.extended_rules && typeof categoryRules.extended_rules === 'object') {
       const extendedRules = categoryRules.extended_rules;
+      console.log('[validateDeck] Checking extended_rules:', extendedRules);
       
       // Count unique attribute values for each rule key
       Object.keys(extendedRules).forEach(ruleKey => {
@@ -1889,8 +1919,8 @@ const DeckBuilderPage = () => {
         Object.keys(mergedItems).forEach(productId => {
           if (mergedItems[productId] <= 0) return;
           
-          const extendedData = productExtendedData[productId] || [];
-          extendedData.forEach(item => {
+          const extData = productExtendedData[productId] || [];
+          extData.forEach(item => {
             const key = item.key || item.name;
             const value = item.value || item.val;
             
@@ -1900,8 +1930,11 @@ const DeckBuilderPage = () => {
           });
         });
         
+        console.log(`[validateDeck] ${ruleKey}: ${uniqueValues.size} unique values (max: ${maxUnique})`);
         if (uniqueValues.size > maxUnique) {
-          errors.push(`${ruleKey}: ${uniqueValues.size} unique values exceeds maximum of ${maxUnique}`);
+          const errorMsg = `${ruleKey}: ${uniqueValues.size} unique values exceeds maximum of ${maxUnique}`;
+          console.log('[validateDeck] Extended rules violation:', errorMsg);
+          errors.push(errorMsg);
         }
       });
     }
@@ -1937,13 +1970,17 @@ const DeckBuilderPage = () => {
 
   // Validate deck whenever staged items or extended data changes
   useEffect(() => {
+    console.log('[validateDeck useEffect] categoryRules:', categoryRules);
     if (!categoryRules) {
+      console.log('[validateDeck useEffect] No category rules, clearing errors');
       setValidationErrors([]);
       return;
     }
     
     const mergedItems = { ...deckItems, ...stagedDeckItems };
+    console.log('[validateDeck useEffect] Validating deck with', Object.keys(mergedItems).length, 'products');
     const errors = validateDeck(mergedItems);
+    console.log('[validateDeck useEffect] Validation errors:', errors.length, errors);
     setValidationErrors(errors);
   }, [deckItems, stagedDeckItems, categoryRules, productExtendedData, deckProducts]);
 
@@ -1977,38 +2014,7 @@ const DeckBuilderPage = () => {
 
   return (
     <div className="deck-builder-page">
-      <header className="deck-builder-header">
-        <div className="header-content">
-          <Link to="/" className="logo-link">
-            <h1 className="logo">TCGConvert</h1>
-          </Link>
-          <nav className="header-nav">
-            {user ? (
-              <div className="user-menu">
-                <Link to="/inventory" className="nav-link">Inventory</Link>
-                <Link to="/deck-lists" className="nav-link">Deck Lists</Link>
-                <button onClick={signOut} className="nav-button">Sign Out</button>
-              </div>
-            ) : (
-              <div className="auth-links">
-                <Link to="/login" className="nav-link">Log In</Link>
-                <Link to="/signup" className="nav-link nav-link-primary">Sign Up</Link>
-              </div>
-            )}
-            <div className="nav-currency-selector">
-              <select
-                className="nav-currency-select"
-                value={selectedCurrency}
-                onChange={(e) => setSelectedCurrency(e.target.value)}
-              >
-                <option value="usd">USD</option>
-                <option value="cad">CAD</option>
-                <option value="eur">EUR</option>
-              </select>
-            </div>
-          </nav>
-        </div>
-      </header>
+      <NavigationBar className="deck-builder-header" />
 
       <main className="deck-builder-main">
         {/* Floating Toggle Button - Show for all users */}
@@ -2447,20 +2453,71 @@ const DeckBuilderPage = () => {
                         )}
                       </div>
                     )}
-                    {user && (
-                      <button
-                        className={`favorite-button-card ${isFavorited ? 'favorited' : ''}`}
-                        onClick={(e) => handleFavoriteToggle(e, productId)}
-                        title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
-                      >
-                        {isFavorited ? '★' : '☆'}
-                      </button>
-                    )}
                   </div>
                 );
               }}
+              renderFavoriteButton={(product, productId, productIdStr, isFavorited) => {
+                if (!user) return null;
+                return (
+                  <button
+                    className={`favorite-button-card ${isFavorited ? 'favorited' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleFavoriteToggle(e, productId);
+                    }}
+                    title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                  >
+                    {isFavorited ? '★' : '☆'}
+                  </button>
+                );
+              }}
               productCardClassName={(product, quantity) => {
-                return quantity > 0 ? 'in-deck-card' : '';
+                const productId = String(product.product_id || product.id);
+                const classes = [];
+                if (quantity > 0) {
+                  classes.push('in-deck-card');
+                }
+                // Check for rule violations
+                if (checkMaxDuplicatesViolation(productId, quantity)) {
+                  classes.push('rule-violation-max-duplicates');
+                }
+                const extViolations = checkExtendedRulesViolation(productId);
+                if (extViolations) {
+                  classes.push('rule-violation-extended');
+                }
+                return classes.join(' ');
+              }}
+              renderProductCardBadges={(product, quantity) => {
+                if (quantity <= 0) return null;
+                const productId = String(product.product_id || product.id);
+                const badges = [];
+                
+                // Max duplicates violation badge - only show if violation exists
+                if (checkMaxDuplicatesViolation(productId, quantity)) {
+                  const mergedItems = { ...deckItems, ...stagedDeckItems };
+                  const currentQty = mergedItems[productId] || 0;
+                  badges.push(
+                    <div key="max-dup" className="rule-violation-badge rule-violation-badge-max-duplicates" 
+                         title={`Exceeds max duplicates: ${currentQty} > ${categoryRules?.max_duplicates}`}>
+                      {currentQty}/{categoryRules?.max_duplicates}
+                    </div>
+                  );
+                }
+                
+                // Extended rules violation badge - only show if violation exists
+                const extViolations = checkExtendedRulesViolation(productId);
+                if (extViolations) {
+                  extViolations.forEach((violation, idx) => {
+                    badges.push(
+                      <div key={`ext-${idx}`} className="rule-violation-badge rule-violation-badge-extended"
+                           title={`${violation.ruleKey}: ${violation.currentCount} unique values exceeds maximum of ${violation.maxAllowed}`}>
+                        {violation.ruleKey}
+                      </div>
+                    );
+                  });
+                }
+                
+                return badges.length > 0 ? <div className="rule-violation-badges">{badges}</div> : null;
               }}
             />
           </div>

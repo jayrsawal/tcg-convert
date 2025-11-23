@@ -1,15 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import NavigationBar from './NavigationBar';
 import DecksSection from './DecksSection';
 import './DeckListsPage.css';
 
 const DeckListsPage = () => {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [selectedCategoryId] = useState(86); // Default to category 86
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [loading] = useState(false);
+  const [error] = useState(null);
 
   useEffect(() => {
     if (!user) {
@@ -24,20 +25,7 @@ const DeckListsPage = () => {
 
   return (
     <div className="deck-lists-page">
-      <header className="deck-lists-header">
-        <div className="header-content">
-          <Link to="/" className="logo-link">
-            <h1 className="logo">TCGConvert</h1>
-          </Link>
-          <nav className="header-nav">
-            <div className="user-menu">
-              <Link to="/inventory" className="nav-link">Inventory</Link>
-              <Link to="/deck-lists" className="nav-link">Deck Lists</Link>
-              <button onClick={signOut} className="nav-button">Sign Out</button>
-            </div>
-          </nav>
-        </div>
-      </header>
+      <NavigationBar className="deck-lists-header" />
 
       <main className="deck-lists-main">
         <div className="deck-lists-container">

@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useAuth } from './AuthContext';
+import { fetchUserProfile } from '../lib/api';
 
 const CurrencyContext = createContext();
 
@@ -11,6 +13,7 @@ export const useCurrency = () => {
 };
 
 export const CurrencyProvider = ({ children }) => {
+  const { user } = useAuth();
   // Load currency from localStorage or default to 'usd'
   const [selectedCurrency, setSelectedCurrency] = useState(() => {
     const saved = localStorage.getItem('selectedCurrency');
@@ -19,6 +22,34 @@ export const CurrencyProvider = ({ children }) => {
 
   const [currencyRates, setCurrencyRates] = useState(null);
   const [loadingRates, setLoadingRates] = useState(false);
+  const [profileCurrencyLoaded, setProfileCurrencyLoaded] = useState(false);
+
+  // Load currency from user profile when user is authenticated
+  useEffect(() => {
+    const loadProfileCurrency = async () => {
+      if (user && !profileCurrencyLoaded) {
+        try {
+          const profile = await fetchUserProfile(user.id);
+          if (profile && profile.currency) {
+            const profileCurrency = profile.currency.toLowerCase();
+            setSelectedCurrency(profileCurrency);
+            setProfileCurrencyLoaded(true);
+          } else {
+            setProfileCurrencyLoaded(true);
+          }
+        } catch (err) {
+          console.error('Error loading profile currency:', err);
+          // Continue with localStorage/default currency
+          setProfileCurrencyLoaded(true);
+        }
+      } else if (!user) {
+        // Reset when user logs out
+        setProfileCurrencyLoaded(false);
+      }
+    };
+
+    loadProfileCurrency();
+  }, [user, profileCurrencyLoaded]);
 
   // Save currency to localStorage whenever it changes
   useEffect(() => {

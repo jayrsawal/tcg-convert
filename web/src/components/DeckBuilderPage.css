@@ -1137,6 +1137,45 @@
   background: #edf2f7;
 }
 
+/* Rule violation styles - badges only, no borders */
+/* Show badges only on hover for violating cards */
+.product-card.rule-violation-max-duplicates:hover .rule-violation-badges,
+.product-card.rule-violation-extended:hover .rule-violation-badges {
+  display: flex;
+}
+
+.rule-violation-badges {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: none; /* Hidden by default, shown on hover */
+  flex-direction: column;
+  gap: 4px;
+  z-index: 11;
+  pointer-events: none;
+}
+
+.rule-violation-badge {
+  background: rgba(229, 62, 62, 0.95);
+  color: white;
+  padding: 3px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
+}
+
+.rule-violation-badge-max-duplicates {
+  background: rgba(229, 62, 62, 0.95);
+}
+
+.rule-violation-badge-extended {
+  background: rgba(245, 158, 11, 0.95);
+  color: #1f2937;
+}
+
 .deck-controls {
   position: absolute !important;
   top: 8px !important;

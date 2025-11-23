@@ -1027,7 +1027,14 @@ export const fetchCategoryRules = async (categoryId = null) => {
     }
 
     const data = await response.json();
-    return data.rules || data.data || data || [];
+    // API returns a single object when category_id is provided, or array when not
+    if (categoryId !== null && categoryId !== undefined) {
+      // Single object response
+      return data;
+    } else {
+      // Array response when no category_id
+      return data.rules || data.data || (Array.isArray(data) ? data : []);
+    }
   } catch (error) {
     console.error('Error fetching category rules:', error);
     return [];
@@ -1059,6 +1066,81 @@ export const fetchGroupsByCategory = async (categoryId) => {
   } catch (error) {
     console.error('Error fetching groups:', error);
     return [];
+  }
+};
+
+/**
+ * Fetch user profile
+ * @param {string} userId - User ID (UUID)
+ * @returns {Promise<Object>} Profile object
+ */
+export const fetchUserProfile = async (userId) => {
+  try {
+    const url = API_BASE_URL 
+      ? `${API_BASE_URL}/profiles?user_id=${userId}`
+      : `/profiles?user_id=${userId}`;
+    
+    const headers = await getAuthHeaders();
+    const response = await fetch(url, { headers });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return null;
+      }
+      throw new Error(`Failed to fetch profile: ${response.status} ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update user profile currency
+ * @param {string} userId - User ID (UUID)
+ * @param {string} currency - Currency code (USD, CAD, EUR)
+ * @returns {Promise<Object>} Updated profile object
+ */
+export const updateUserCurrency = async (userId, currency) => {
+  try {
+    const url = API_BASE_URL 
+      ? `${API_BASE_URL}/profiles?user_id=${userId}`
+      : `/profiles?user_id=${userId}`;
+    
+    const headers = await getAuthHeaders();
+    
+    // Get current profile first to preserve other fields
+    const getResponse = await fetch(url, { headers });
+    if (!getResponse.ok && getResponse.status !== 404) {
+      throw new Error(`Failed to fetch profile: ${getResponse.status} ${getResponse.statusText}`);
+    }
+    
+    const currentProfile = getResponse.status === 404 ? {} : await getResponse.json();
+    
+    // Update currency field
+    const requestBody = {
+      ...currentProfile,
+      currency: currency.toUpperCase()
+    };
+    
+    const postResponse = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!postResponse.ok) {
+      const errorText = await postResponse.text();
+      console.error('API Error Response:', errorText);
+      throw new Error(`Failed to update currency: ${postResponse.status} ${postResponse.statusText}`);
+    }
+
+    return await postResponse.json();
+  } catch (error) {
+    console.error('Error updating user currency:', error);
+    throw error;
   }
 };
 

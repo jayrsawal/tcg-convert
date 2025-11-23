@@ -70,6 +70,8 @@ const ProductListingContent = ({
   // Custom render props
   renderProductCardActions,
   productCardClassName,
+  renderProductCardBadges,
+  renderFavoriteButton,
 }) => {
   // Local state for search input (to avoid triggering search on every keystroke)
   const [searchInputValue, setSearchInputValue] = useState(searchQuery || '');
@@ -475,8 +477,14 @@ const ProductListingContent = ({
                     </div>
                   )}
                   
-                  {/* Custom actions (deck buttons, favorite button, etc.) */}
+                  {/* Custom actions (deck buttons, etc.) */}
                   {renderProductCardActions && renderProductCardActions(product, productId, productIdStr, quantity, isFavorited)}
+                  
+                  {/* Rule Violation Badges - Top Left */}
+                  {renderProductCardBadges && renderProductCardBadges(product, quantity)}
+                  
+                  {/* Favorite Button - Bottom Left */}
+                  {renderFavoriteButton && renderFavoriteButton(product, productId, productIdStr, isFavorited)}
                   
                   {/* Quantity Badge - Bottom Right */}
                   {quantity > 0 && (

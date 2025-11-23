@@ -70,6 +70,31 @@
   color: white;
 }
 
+.nav-link-icon {
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 36px;
+  height: 36px;
+}
+
+.nav-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.nav-icon-text {
+  display: none;
+}
+
+.nav-icon-red {
+  color: #e53e3e;
+  font-size: 20px;
+}
+
 .nav-button {
   padding: 10px 20px;
   background: #e53e3e;
@@ -86,6 +111,39 @@
   background: #c53030;
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(229, 62, 62, 0.3);
+}
+
+.nav-button-icon {
+  padding: 8px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+}
+
+.nav-button-icon:hover {
+  background: rgba(229, 62, 62, 0.1);
+}
+
+.nav-button-icon {
+  gap: 6px;
+}
+
+.nav-button-icon .nav-icon-red {
+  font-size: 20px;
+  line-height: 1;
+  color: #e53e3e;
+  flex-shrink: 0;
+}
+
+.nav-button-icon .nav-icon-text {
+  display: none;
 }
 
 .auth-links {

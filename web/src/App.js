@@ -9,6 +9,7 @@ import DeckListsPage from './components/DeckListsPage';
 import ProductCardPage from './components/ProductCardPage';
 import LoginPage from './components/LoginPage';
 import SignupPage from './components/SignupPage';
+import ProfilePage from './components/ProfilePage';
 import './App.css';
 
 function App() {
@@ -25,6 +26,7 @@ function App() {
             <Route path="/deck-builder/:deckListId" element={<DeckBuilderPage />} />
             <Route path="/deck-lists" element={<DeckListsPage />} />
             <Route path="/products/:productId" element={<ProductCardPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { fetchCategories, fetchInventoryStatsByCategory, fetchProductCountsByCategory, fetchCurrentPricesBulk } from '../lib/api';
 import { getUserInventory } from '../lib/inventory';
+import NavigationBar from './NavigationBar';
 import DecksSection from './DecksSection';
 import './LandingPage.css';
 import './DeckListsPage.css';
 
 const LandingPage = () => {
-  const { user, signOut } = useAuth();
-  const { selectedCurrency, setSelectedCurrency, loadingRates, currencyRates } = useCurrency();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [category, setCategory] = useState(null);
   const [categoryStats, setCategoryStats] = useState(null);
@@ -173,38 +173,7 @@ const LandingPage = () => {
 
   return (
     <div className="landing-page">
-      <header className="landing-header">
-        <div className="header-content">
-          <Link to="/" className="logo-link">
-            <h1 className="logo">TCGConvert</h1>
-          </Link>
-          <nav className="header-nav">
-            {user ? (
-              <div className="user-menu">
-                <Link to="/inventory" className="nav-link">Inventory</Link>
-                <Link to="/deck-lists" className="nav-link">Deck Lists</Link>
-                <button onClick={signOut} className="nav-button">Sign Out</button>
-              </div>
-            ) : (
-              <div className="auth-links">
-                <Link to="/login" className="nav-link">Log In</Link>
-                <Link to="/signup" className="nav-link nav-link-primary">Sign Up</Link>
-              </div>
-            )}
-            <div className="nav-currency-selector">
-              <select
-                className="nav-currency-select"
-                value={selectedCurrency}
-                onChange={(e) => setSelectedCurrency(e.target.value)}
-              >
-                <option value="usd">USD</option>
-                <option value="cad">CAD</option>
-                <option value="eur">EUR</option>
-              </select>
-            </div>
-          </nav>
-        </div>
-      </header>
+      <NavigationBar className="landing-header" />
 
       <main className="landing-main">
         <div className="hero-section">

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { getFavorites, toggleFavorite } from '../lib/favorites';
 import { getUserInventory, bulkUpdateInventory } from '../lib/inventory';
 import { fetchGroupsByCategory, fetchProductExtendedDataKeyValues, filterProducts, searchProducts, fetchProductsBulk, extractExtendedDataFromProduct, fetchCurrentPricesBulk } from '../lib/api';
+import NavigationBar from './NavigationBar';
 import ProductPreviewModal from './ProductPreviewModal';
 import NotificationModal from './NotificationModal';
 import ConfirmationModal from './ConfirmationModal';
@@ -20,7 +21,7 @@ const ProductsPage = () => {
   const { categoryId: categoryIdParam } = useParams();
   // Use categoryId from params if available, otherwise default to 86 for /inventory route
   const categoryId = categoryIdParam || '86';
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const { selectedCurrency, setSelectedCurrency, currencyRates, loadingRates } = useCurrency();
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
@@ -44,8 +45,6 @@ const ProductsPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [hasMorePages, setHasMorePages] = useState(true); // Start as true to trigger initial load
-  const [lastLoadAddedProducts, setLastLoadAddedProducts] = useState(true); // Track if last load added products
-  const [newlyAddedProductIds, setNewlyAddedProductIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [loadingGroups, setLoadingGroups] = useState(true);
   const [loadingAttributes, setLoadingAttributes] = useState(true);
@@ -393,7 +392,6 @@ const ProductsPage = () => {
           const calculatedHasMore = total > 0 ? itemsLoaded < total : hasMore;
           // Track if this load actually added products (not just duplicates)
           const actuallyAddedProducts = newProducts.length > 0;
-          setLastLoadAddedProducts(actuallyAddedProducts);
           console.log('loadProducts (append):', {
             productsDataLength: productsData.length,
             newProductsLength: newProducts.length,
@@ -409,17 +407,6 @@ const ProductsPage = () => {
           // Only set hasMorePages if we actually got products or haven't reached total
           setHasMorePages(calculatedHasMore && actuallyAddedProducts);
           
-          // Track newly added product IDs for animation
-          const newProductIds = new Set(
-            newProducts.map(p => String(p.product_id || p.id))
-          );
-          setNewlyAddedProductIds(newProductIds);
-          
-          // Clear animation class after animation completes
-          setTimeout(() => {
-            setNewlyAddedProductIds(new Set());
-          }, 600); // Match animation duration
-          
           return updatedProducts;
         });
       } else {
@@ -428,8 +415,6 @@ const ProductsPage = () => {
         // Use API's has_more field if available, otherwise calculate from total
         const itemsLoaded = productsData.length;
         const calculatedHasMore = total > 0 ? itemsLoaded < total : hasMore;
-        // Reset tracking when replacing
-        setLastLoadAddedProducts(productsData.length > 0);
         console.log('loadProducts (replace):', {
           productsDataLength: productsData.length,
           pageSize,
@@ -1679,7 +1664,6 @@ const ProductsPage = () => {
 
   const hasStagedChanges = Object.keys(stagedInventory).length > 0;
   const stats = getInventoryStats();
-  const histogramData = getHistogramData();
 
   if (loading && products.length === 0) {
     return (
@@ -1694,38 +1678,7 @@ const ProductsPage = () => {
 
   return (
     <div className="products-page">
-      <header className="products-header">
-        <div className="header-content">
-          <Link to="/" className="logo-link">
-            <h1 className="logo">TCGHermit</h1>
-          </Link>
-          <nav className="header-nav">
-            {user ? (
-              <div className="user-menu">
-                <Link to="/inventory" className="nav-link">Inventory</Link>
-                <Link to="/deck-lists" className="nav-link">Deck Lists</Link>
-                <button onClick={signOut} className="nav-button">Sign Out</button>
-              </div>
-            ) : (
-              <div className="auth-links">
-                <Link to="/login" className="nav-link">Log In</Link>
-                <Link to="/signup" className="nav-link nav-link-primary">Sign Up</Link>
-              </div>
-            )}
-            <div className="nav-currency-selector">
-              <select
-                className="nav-currency-select"
-                value={selectedCurrency}
-                onChange={(e) => setSelectedCurrency(e.target.value)}
-              >
-                <option value="usd">USD</option>
-                <option value="cad">CAD</option>
-                <option value="eur">EUR</option>
-              </select>
-            </div>
-          </nav>
-        </div>
-      </header>
+      <NavigationBar className="products-header" />
 
       <main className="products-main">
           <button 
