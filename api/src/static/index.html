@@ -1,0 +1,2292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TCGHermit API Documentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        .subtitle {
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        .auth-note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            margin-bottom: 30px;
+            border-radius: 4px;
+        }
+        .auth-note strong {
+            color: #856404;
+        }
+        .section {
+            margin-top: 50px;
+        }
+        .section-title {
+            font-size: 1.8em;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #3498db;
+        }
+        .endpoint {
+            margin-bottom: 40px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            border-left: 4px solid #3498db;
+        }
+        .endpoint-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .method {
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        .method.get { background: #2ecc71; color: white; }
+        .method.post { background: #3498db; color: white; }
+        .method.patch { background: #f39c12; color: white; }
+        .method.delete { background: #e74c3c; color: white; }
+        .endpoint-path {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: #2c3e50;
+            font-size: 1.1em;
+        }
+        .endpoint-description {
+            margin-bottom: 15px;
+            color: #555;
+        }
+        .endpoint-params {
+            margin-top: 15px;
+        }
+        .endpoint-params h4 {
+            margin-top: 15px;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+        .param {
+            margin: 8px 0;
+            padding: 8px;
+            background: white;
+            border-radius: 4px;
+        }
+        .param-name {
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+            color: #e74c3c;
+        }
+        .param-type {
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+        .param-required {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .example {
+            margin-top: 15px;
+            padding: 15px;
+            background: #2c3e50;
+            border-radius: 4px;
+            color: #ecf0f1;
+        }
+        .example h4 {
+            margin-bottom: 10px;
+            color: #ecf0f1;
+        }
+        .example code {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.8;
+            white-space: pre-wrap;
+        }
+        .example-url {
+            color: #3498db;
+        }
+        code {
+            background: #ecf0f1;
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: #e74c3c;
+        }
+        .response {
+            margin-top: 15px;
+            padding: 15px;
+            background: #e8f5e9;
+            border-radius: 4px;
+            border-left: 4px solid #4caf50;
+        }
+        .response h4 {
+            margin-bottom: 10px;
+            color: #2e7d32;
+        }
+        .response code {
+            background: white;
+            color: #2e7d32;
+        }
+        .response-schema {
+            margin-top: 15px;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 4px;
+            border-left: 4px solid #2196f3;
+        }
+        .response-schema h4 {
+            margin-bottom: 10px;
+            color: #1565c0;
+        }
+        .response-schema code {
+            background: white;
+            color: #1565c0;
+        }
+        .schema-field {
+            margin: 4px 0;
+            padding-left: 20px;
+        }
+        .schema-field-name {
+            font-weight: bold;
+            color: #1976d2;
+        }
+        .schema-field-type {
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>TCGHermit API Documentation</h1>
+        <p class="subtitle">Backend API for card deck building and trading app - Complete API Reference</p>
+
+        <div class="auth-note">
+            <strong>Authentication:</strong> Some endpoints require authentication. Include a Supabase JWT token in the <code>Authorization</code> header as <code>Bearer &lt;token&gt;</code>. See <a href="/docs/AUTHENTICATION.md" target="_blank">Authentication Guide</a> for details.
+        </div>
+
+        <!-- Categories Section -->
+        <div class="section">
+            <h2 class="section-title">Categories</h2>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/categories</span>
+                </div>
+                <div class="endpoint-description">
+                    List all categories with pagination. Results are sorted by category_id.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">page</span> <span class="param-type">(int, optional, default: 1)</span> - Page number
+                    </div>
+                    <div class="param">
+                        <span class="param-name">limit</span> <span class="param-type">(int, optional, default: 100, max: 1000)</span> - Items per page
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">GET /categories?page=1&limit=20</span></code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>{
+  "data": [Category],
+  "page": int,
+  "limit": int,
+  "total": int | null,
+  "has_more": bool
+}</code>
+                    <div class="schema-field">
+                        <span class="schema-field-name">Category</span> <span class="schema-field-type">object</span>
+                        <div class="schema-field" style="margin-left: 20px;">
+                            <span class="schema-field-name">category_id</span> <span class="schema-field-type">bigint (required)</span><br>
+                            <span class="schema-field-name">name</span> <span class="schema-field-type">text (required)</span><br>
+                            <span class="schema-field-name">display_name</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">seo_category_name</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">sealed_label</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">non_sealed_label</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">condition_guide_url</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">is_scannable</span> <span class="schema-field-type">boolean | null</span><br>
+                            <span class="schema-field-name">popularity</span> <span class="schema-field-type">integer | null</span><br>
+                            <span class="schema-field-name">modified_on</span> <span class="schema-field-type">timestamp with time zone | null</span><br>
+                            <span class="schema-field-name">fetched_at</span> <span class="schema-field-type">timestamp with time zone (required)</span><br>
+                            <span class="schema-field-name">raw</span> <span class="schema-field-type">jsonb (default: {})</span><br>
+                            <span class="schema-field-name">fixed_amount</span> <span class="schema-field-type">integer | null</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [
+    {
+      "category_id": 1,
+      "name": "Pokemon",
+      "display_name": "Pokémon",
+      "seo_category_name": "pokemon",
+      "sealed_label": "Sealed",
+      "non_sealed_label": "Unsealed",
+      "condition_guide_url": "https://example.com/condition-guide",
+      "is_scannable": true,
+      "popularity": 100,
+      "modified_on": "2024-01-15T10:30:00Z",
+      "fetched_at": "2024-01-20T08:00:00Z",
+      "raw": {},
+      "fixed_amount": null
+    },
+    {
+      "category_id": 2,
+      "name": "Magic: The Gathering",
+      "display_name": "Magic: The Gathering",
+      "seo_category_name": "magic-the-gathering",
+      "sealed_label": "Sealed",
+      "non_sealed_label": "Unsealed",
+      "condition_guide_url": null,
+      "is_scannable": true,
+      "popularity": 95,
+      "modified_on": "2024-01-15T10:30:00Z",
+      "fetched_at": "2024-01-20T08:00:00Z",
+      "raw": {},
+      "fixed_amount": null
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 50,
+  "has_more": true
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/categories/{category_id}</span>
+                </div>
+                <div class="endpoint-description">
+                    Get a single category by primary key (category_id).
+                </div>
+                <div class="endpoint-params">
+                    <h4>Path Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">category_id</span> <span class="param-type">(int, required)</span> - Category ID
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">GET /categories/1</span></code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "category_id": 1,
+  "name": "Pokemon",
+  "display_name": "Pokémon",
+  "seo_category_name": "pokemon",
+  "sealed_label": "Sealed",
+  "non_sealed_label": "Unsealed",
+  "condition_guide_url": "https://example.com/condition-guide",
+  "is_scannable": true,
+  "popularity": 100,
+  "modified_on": "2024-01-15T10:30:00Z",
+  "fetched_at": "2024-01-20T08:00:00Z",
+  "raw": {},
+  "fixed_amount": null
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/categories/product-counts</span>
+                </div>
+                <div class="endpoint-description">
+                    Get product counts by category. Returns a dictionary mapping category_id to product count.
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">GET /categories/product-counts</span></code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>{
+  "category_id": int  // Dictionary mapping category_id to product count
+}</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "1": 150,
+  "2": 200,
+  "3": 75
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/categories/rules</span>
+                </div>
+                <div class="endpoint-description">
+                    Get category rules (game rules for deck building). If category_id is provided, returns rules for that category. If not provided, returns all category game rules.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">category_id</span> <span class="param-type">(int, optional)</span> - Filter by category_id
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Requests:</h4>
+                    <code><span class="example-url">GET /categories/rules</span>
+<span class="example-url">GET /categories/rules?category_id=1</span></code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema (single category):</h4>
+                    <code>CategoryGameRules</code>
+                    <div class="schema-field">
+                        <span class="schema-field-name">CategoryGameRules</span> <span class="schema-field-type">object</span>
+                        <div class="schema-field" style="margin-left: 20px;">
+                            <span class="schema-field-name">category_id</span> <span class="schema-field-type">bigint (required)</span><br>
+                            <span class="schema-field-name">deck_size</span> <span class="schema-field-type">integer | null</span><br>
+                            <span class="schema-field-name">max_duplicates</span> <span class="schema-field-type">integer | null</span><br>
+                            <span class="schema-field-name">extended_rules</span> <span class="schema-field-type">jsonb (default: {})</span><br>
+                            <span class="schema-field-name">created_at</span> <span class="schema-field-type">timestamp with time zone (required)</span><br>
+                            <span class="schema-field-name">updated_at</span> <span class="schema-field-type">timestamp with time zone (required)</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response (with category_id):</h4>
+                    <code>{
+  "category_id": 1,
+  "deck_size": 60,
+  "max_duplicates": 4,
+  "extended_rules": {
+    "energy_types": ["Fire", "Water", "Grass"],
+    "special_rules": []
+  },
+  "created_at": "2024-01-01T00:00:00Z",
+  "updated_at": "2024-01-15T10:30:00Z"
+}</code>
+                    <h4 style="margin-top: 15px;">Example Response (all rules - array):</h4>
+                    <code>[
+  {
+    "category_id": 1,
+    "deck_size": 60,
+    "max_duplicates": 4,
+    ...
+  },
+  {
+    "category_id": 2,
+    "deck_size": 60,
+    "max_duplicates": 4,
+    ...
+  }
+]</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- Groups Section -->
+        <div class="section">
+            <h2 class="section-title">Groups</h2>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/groups</span>
+                </div>
+                <div class="endpoint-description">
+                    List all groups with pagination. Results are sorted by published_on (descending), then by group_id.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">page</span> <span class="param-type">(int, optional, default: 1)</span>
+                    </div>
+                    <div class="param">
+                        <span class="param-name">limit</span> <span class="param-type">(int, optional, default: 100, max: 1000)</span>
+                    </div>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PaginatedResponse&lt;Group&gt;</code>
+                    <div class="schema-field">
+                        <span class="schema-field-name">Group</span> <span class="schema-field-type">object</span>
+                        <div class="schema-field" style="margin-left: 20px;">
+                            <span class="schema-field-name">group_id</span> <span class="schema-field-type">bigint (required)</span><br>
+                            <span class="schema-field-name">category_id</span> <span class="schema-field-type">bigint (required)</span><br>
+                            <span class="schema-field-name">name</span> <span class="schema-field-type">text (required)</span><br>
+                            <span class="schema-field-name">abbreviation</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">is_supplemental</span> <span class="schema-field-type">boolean | null</span><br>
+                            <span class="schema-field-name">published_on</span> <span class="schema-field-type">timestamp with time zone | null</span><br>
+                            <span class="schema-field-name">modified_on</span> <span class="schema-field-type">timestamp with time zone | null</span><br>
+                            <span class="schema-field-name">fetched_at</span> <span class="schema-field-type">timestamp with time zone (required)</span><br>
+                            <span class="schema-field-name">raw</span> <span class="schema-field-type">jsonb (default: {})</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [
+    {
+      "group_id": 1,
+      "category_id": 1,
+      "name": "Base Set",
+      "abbreviation": "BS",
+      "is_supplemental": false,
+      "published_on": "1999-01-09T00:00:00Z",
+      "modified_on": "2024-01-15T10:30:00Z",
+      "fetched_at": "2024-01-20T08:00:00Z",
+      "raw": {}
+    }
+  ],
+  "page": 1,
+  "limit": 100,
+  "total": 50,
+  "has_more": false
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/groups/{group_id}</span>
+                </div>
+                <div class="endpoint-description">
+                    Get a single group by primary key (group_id).
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>Group</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "group_id": 1,
+  "category_id": 1,
+  "name": "Base Set",
+  "abbreviation": "BS",
+  "is_supplemental": false,
+  "published_on": "1999-01-09T00:00:00Z",
+  "modified_on": "2024-01-15T10:30:00Z",
+  "fetched_at": "2024-01-20T08:00:00Z",
+  "raw": {}
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/groups/by-category/{category_id}</span>
+                </div>
+                <div class="endpoint-description">
+                    Get all groups for a specific category. Results are sorted by published_on (descending), then by group_id.
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PaginatedResponse&lt;Group&gt;</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [
+    {
+      "group_id": 1,
+      "category_id": 1,
+      "name": "Base Set",
+      "abbreviation": "BS",
+      "is_supplemental": false,
+      "published_on": "1999-01-09T00:00:00Z",
+      "modified_on": "2024-01-15T10:30:00Z",
+      "fetched_at": "2024-01-20T08:00:00Z",
+      "raw": {}
+    }
+  ],
+  "page": 1,
+  "limit": 100,
+  "total": 10,
+  "has_more": false
+}</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- Products Section -->
+        <div class="section">
+            <h2 class="section-title">Products</h2>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/products</span>
+                </div>
+                <div class="endpoint-description">
+                    List all products with pagination. Results are sorted by name, then by product_id. Each product includes a <code>number</code> field from extended data.
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PaginatedResponse&lt;Product&gt;</code>
+                    <div class="schema-field">
+                        <span class="schema-field-name">Product</span> <span class="schema-field-type">object</span>
+                        <div class="schema-field" style="margin-left: 20px;">
+                            <span class="schema-field-name">product_id</span> <span class="schema-field-type">bigint (required)</span><br>
+                            <span class="schema-field-name">category_id</span> <span class="schema-field-type">bigint (required)</span><br>
+                            <span class="schema-field-name">group_id</span> <span class="schema-field-type">bigint (required)</span><br>
+                            <span class="schema-field-name">name</span> <span class="schema-field-type">text (required)</span><br>
+                            <span class="schema-field-name">clean_name</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">image_url</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">url</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">modified_on</span> <span class="schema-field-type">timestamp with time zone | null</span><br>
+                            <span class="schema-field-name">fetched_at</span> <span class="schema-field-type">timestamp with time zone (required)</span><br>
+                            <span class="schema-field-name">raw</span> <span class="schema-field-type">jsonb (default: {})</span><br>
+                            <span class="schema-field-name">fixed_amount</span> <span class="schema-field-type">integer | null</span><br>
+                            <span class="schema-field-name">number</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">extended_data_raw</span> <span class="schema-field-type">jsonb | null (raw JSON string)</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [
+    {
+      "product_id": 12345,
+      "category_id": 1,
+      "group_id": 1,
+      "name": "Pikachu",
+      "clean_name": "pikachu",
+      "image_url": "https://example.com/pikachu.jpg",
+      "url": "https://tcgplayer.com/product/12345",
+      "modified_on": "2024-01-15T10:30:00Z",
+      "fetched_at": "2024-01-20T08:00:00Z",
+      "raw": {},
+      "fixed_amount": null,
+      "number": "025",
+      "extended_data_raw": "{\"Rarity\": \"Common\", \"Number\": \"025\", \"Type\": \"Electric\"}"
+    }
+  ],
+  "page": 1,
+  "limit": 100,
+  "total": 1000,
+  "has_more": true
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/products/search</span>
+                </div>
+                <div class="endpoint-description">
+                    Search products by partial name matching. Performs case-insensitive partial matching on product names. Results are sorted by name, then by product_id and support pagination.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">q</span> <span class="param-type">(string, required, min: 1)</span> - Search query for partial name matching (case-insensitive)
+                    </div>
+                    <div class="param">
+                        <span class="param-name">page</span> <span class="param-type">(int, optional, default: 1)</span> - Page number
+                    </div>
+                    <div class="param">
+                        <span class="param-name">limit</span> <span class="param-type">(int, optional, default: 100, max: 1000)</span> - Number of items per page
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">GET /products/search?q=pika&page=1&limit=20</span></code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PaginatedResponse&lt;Product&gt;</code>
+                    <div class="schema-field">
+                        <span class="schema-field-name">PaginatedResponse</span> <span class="schema-field-type">object</span>
+                        <div class="schema-field" style="margin-left: 20px;">
+                            <span class="schema-field-name">data</span> <span class="schema-field-type">array of Product</span><br>
+                            <span class="schema-field-name">page</span> <span class="schema-field-type">integer (required)</span><br>
+                            <span class="schema-field-name">limit</span> <span class="schema-field-type">integer (required)</span><br>
+                            <span class="schema-field-name">total</span> <span class="schema-field-type">integer | null</span><br>
+                            <span class="schema-field-name">has_more</span> <span class="schema-field-type">boolean (required)</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [
+    {
+      "product_id": 12345,
+      "category_id": 1,
+      "group_id": 1,
+      "name": "Pikachu",
+      "clean_name": "pikachu",
+      "image_url": "https://example.com/pikachu.jpg",
+      "url": "https://tcgplayer.com/product/12345",
+      "modified_on": "2024-01-15T10:30:00Z",
+      "fetched_at": "2024-01-20T08:00:00Z",
+      "fixed_amount": null,
+      "number": "025",
+      "extended_data_raw": "{\"Rarity\": \"Common\", \"Number\": \"025\", \"Type\": \"Electric\"}"
+    },
+    {
+      "product_id": 12346,
+      "category_id": 1,
+      "group_id": 1,
+      "name": "Pikachu VMAX",
+      "clean_name": "pikachu vmax",
+      "image_url": "https://example.com/pikachu-vmax.jpg",
+      "url": "https://tcgplayer.com/product/12346",
+      "modified_on": "2024-01-15T10:30:00Z",
+      "fetched_at": "2024-01-20T08:00:00Z",
+      "fixed_amount": null,
+      "number": "188",
+      "extended_data_raw": "{\"Rarity\": \"Ultra Rare\", \"Number\": \"188\", \"Type\": \"Electric\"}"
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 15,
+  "has_more": false
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/products/{product_id}</span>
+                </div>
+                <div class="endpoint-description">
+                    Get a single product by primary key (product_id). Each product includes a <code>number</code> field from extended data.
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>Product</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "product_id": 12345,
+  "category_id": 1,
+  "group_id": 1,
+  "name": "Pikachu",
+  "clean_name": "pikachu",
+  "image_url": "https://example.com/pikachu.jpg",
+  "url": "https://tcgplayer.com/product/12345",
+  "modified_on": "2024-01-15T10:30:00Z",
+  "fetched_at": "2024-01-20T08:00:00Z",
+  "raw": {},
+  "fixed_amount": null,
+  "number": "025",
+  "extended_data_raw": "{\"Rarity\": \"Common\", \"Number\": \"025\", \"Type\": \"Electric\"}"
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/products/by-category/{category_id}</span>
+                </div>
+                <div class="endpoint-description">
+                    Get all products for a specific category. Results are sorted by name (alphabetical), then by product_id and support pagination.
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PaginatedResponse&lt;Product&gt;</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [
+    {
+      "product_id": 12345,
+      "category_id": 1,
+      "group_id": 1,
+      "name": "Pikachu",
+      "clean_name": "pikachu",
+      "image_url": "https://example.com/pikachu.jpg",
+      "url": "https://tcgplayer.com/product/12345",
+      "modified_on": "2024-01-15T10:30:00Z",
+      "fetched_at": "2024-01-20T08:00:00Z",
+      "raw": {},
+      "fixed_amount": null,
+      "number": "025",
+      "extended_data_raw": "{\"Rarity\": \"Common\", \"Number\": \"001\"}"
+    }
+  ],
+  "page": 1,
+  "limit": 100,
+  "total": 500,
+  "has_more": true
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/products/by-group/{group_id}</span>
+                </div>
+                <div class="endpoint-description">
+                    Get all products for a specific group. Results are sorted by name (alphabetical), then by product_id and support pagination.
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PaginatedResponse&lt;Product&gt;</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [
+    {
+      "product_id": 12345,
+      "category_id": 1,
+      "group_id": 1,
+      "name": "Pikachu",
+      "clean_name": "pikachu",
+      "image_url": "https://example.com/pikachu.jpg",
+      "url": "https://tcgplayer.com/product/12345",
+      "modified_on": "2024-01-15T10:30:00Z",
+      "fetched_at": "2024-01-20T08:00:00Z",
+      "raw": {},
+      "fixed_amount": null,
+      "number": "025",
+      "extended_data_raw": "{\"Rarity\": \"Common\", \"Number\": \"001\"}"
+    }
+  ],
+  "page": 1,
+  "limit": 100,
+  "total": 102,
+  "has_more": true
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/products/filter</span>
+                </div>
+                <div class="endpoint-description">
+                    Filter products by extended data key-value pairs, category, and/or group. Different filter keys are combined with AND logic, while multiple values for a single key are combined with OR logic. For example, {"Rarity": ["Common", "Rare"], "Number": "001"} returns products with (Rarity=Common OR Rarity=Rare) AND Number=001. Results can be sorted by name or product_id, ascending or descending.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">page</span> <span class="param-type">(int, optional, default: 1)</span>
+                    </div>
+                    <div class="param">
+                        <span class="param-name">limit</span> <span class="param-type">(int, optional, default: 100, max: 1000)</span>
+                    </div>
+                    <h4>Request Body:</h4>
+                    <div class="param">
+                        <span class="param-name">category_id</span> <span class="param-type">(int, optional)</span> - Filter by category ID
+                    </div>
+                    <div class="param">
+                        <span class="param-name">group_id</span> <span class="param-type">(int, optional)</span> - Filter by group ID
+                    </div>
+                    <div class="param">
+                        <span class="param-name">filters</span> <span class="param-type">(object, optional)</span> - Key-value pairs for extended data filtering. Values can be strings or arrays of strings. Multiple values for a key use OR logic, different keys use AND logic.
+                    </div>
+                    <div class="param">
+                        <span class="param-name">sort_by</span> <span class="param-type">(string, optional, default: "name")</span> - Sort field: "name" or "product_id"
+                    </div>
+                    <div class="param">
+                        <span class="param-name">sort_order</span> <span class="param-type">(string, optional, default: "asc")</span> - Sort order: "asc" or "desc"
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request (with OR logic):</h4>
+                    <code><span class="example-url">POST /products/filter?page=1&limit=20</span>
+{
+  "category_id": 1,
+  "filters": {
+    "Rarity": ["Common", "Rare"],
+    "Number": "001"
+  },
+  "sort_by": "name",
+  "sort_order": "asc"
+}</code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PaginatedResponse&lt;Product&gt;</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [
+    {
+      "product_id": 12345,
+      "category_id": 1,
+      "group_id": 1,
+      "name": "Bulbasaur",
+      "clean_name": "bulbasaur",
+      "image_url": "https://example.com/bulbasaur.jpg",
+      "url": "https://tcgplayer.com/product/12345",
+      "modified_on": "2024-01-15T10:30:00Z",
+      "fetched_at": "2024-01-20T08:00:00Z",
+      "raw": {},
+      "fixed_amount": null,
+      "number": "001",
+      "extended_data_raw": "{\"Rarity\": \"Common\", \"Number\": \"001\", \"Type\": \"Grass\"}"
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 50,
+  "has_more": true
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/products/bulk</span>
+                </div>
+                <div class="endpoint-description">
+                    Get multiple products by their IDs in bulk with pagination. Maximum 1000 product IDs per request. Products that don't exist will not be included in the response. Results are paginated and returned in the order of requested IDs.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">page</span> <span class="param-type">(int, optional, default: 1)</span> - Page number
+                    </div>
+                    <div class="param">
+                        <span class="param-name">limit</span> <span class="param-type">(int, optional, default: 100, max: 1000)</span> - Number of items per page
+                    </div>
+                    <h4>Request Body:</h4>
+                    <div class="param">
+                        <span class="param-name">product_ids</span> <span class="param-type">(array[int], required, min: 1, max: 1000)</span> - List of product IDs to fetch
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">POST /products/bulk?page=1&limit=100</span>
+{
+  "product_ids": [12345, 67890, 11111]
+}</code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PaginatedResponse&lt;Product&gt;</code>
+                    <div class="schema-field">
+                        <span class="schema-field-name">PaginatedResponse</span> <span class="schema-field-type">object</span>
+                        <div class="schema-field" style="margin-left: 20px;">
+                            <span class="schema-field-name">data</span> <span class="schema-field-type">array of Product</span><br>
+                            <span class="schema-field-name">page</span> <span class="schema-field-type">integer (required)</span><br>
+                            <span class="schema-field-name">limit</span> <span class="schema-field-type">integer (required)</span><br>
+                            <span class="schema-field-name">total</span> <span class="schema-field-type">integer | null</span><br>
+                            <span class="schema-field-name">has_more</span> <span class="schema-field-type">boolean (required)</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [
+    {
+      "product_id": 12345,
+      "category_id": 1,
+      "group_id": 1,
+      "name": "Pikachu",
+      "clean_name": "pikachu",
+      "image_url": "https://example.com/pikachu.jpg",
+      "url": "https://tcgplayer.com/product/12345",
+      "modified_on": "2024-01-15T10:30:00Z",
+      "fetched_at": "2024-01-20T08:00:00Z",
+      "fixed_amount": null,
+      "number": "025",
+      "extended_data_raw": "{\"Rarity\": \"Common\", \"Number\": \"025\", \"Type\": \"Electric\"}"
+    },
+    {
+      "product_id": 67890,
+      "category_id": 1,
+      "group_id": 1,
+      "name": "Charizard",
+      "clean_name": "charizard",
+      "image_url": "https://example.com/charizard.jpg",
+      "url": "https://tcgplayer.com/product/67890",
+      "modified_on": "2024-01-15T10:30:00Z",
+      "fetched_at": "2024-01-20T08:00:00Z",
+      "fixed_amount": null,
+      "number": "006",
+      "extended_data_raw": "{\"Rarity\": \"Rare\", \"Number\": \"006\", \"Type\": \"Fire\"}"
+    }
+  ],
+  "page": 1,
+  "limit": 100,
+  "total": 2,
+  "has_more": false
+}</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prices Current Section -->
+        <div class="section">
+            <h2 class="section-title">Current Prices</h2>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/prices-current</span>
+                </div>
+                <div class="endpoint-description">
+                    List all current prices. Results are sorted by product_id.
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>Array&lt;PriceCurrent&gt;</code>
+                    <div class="schema-field">
+                        <span class="schema-field-name">PriceCurrent</span> <span class="schema-field-type">object</span>
+                        <div class="schema-field" style="margin-left: 20px;">
+                            <span class="schema-field-name">product_id</span> <span class="schema-field-type">bigint (required)</span><br>
+                            <span class="schema-field-name">low_price</span> <span class="schema-field-type">numeric | null</span><br>
+                            <span class="schema-field-name">mid_price</span> <span class="schema-field-type">numeric | null</span><br>
+                            <span class="schema-field-name">high_price</span> <span class="schema-field-type">numeric | null</span><br>
+                            <span class="schema-field-name">market_price</span> <span class="schema-field-type">numeric | null</span><br>
+                            <span class="schema-field-name">direct_low_price</span> <span class="schema-field-type">numeric | null</span><br>
+                            <span class="schema-field-name">sub_type_name</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">fetched_at</span> <span class="schema-field-type">timestamp with time zone (required)</span><br>
+                            <span class="schema-field-name">raw</span> <span class="schema-field-type">jsonb (default: {})</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>[
+  {
+    "product_id": 12345,
+    "low_price": 0.50,
+    "mid_price": 1.25,
+    "high_price": 2.00,
+    "market_price": 1.15,
+    "direct_low_price": 0.45,
+    "sub_type_name": "Normal",
+    "fetched_at": "2024-01-20T08:00:00Z",
+    "raw": {}
+  },
+  {
+    "product_id": 67890,
+    "low_price": 5.00,
+    "mid_price": 7.50,
+    "high_price": 10.00,
+    "market_price": 7.25,
+    "direct_low_price": 4.75,
+    "sub_type_name": "Holo",
+    "fetched_at": "2024-01-20T08:00:00Z",
+    "raw": {}
+  }
+]</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/prices-current/{product_id}</span>
+                </div>
+                <div class="endpoint-description">
+                    Get current price for a single product by primary key (product_id).
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PriceCurrent</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "product_id": 12345,
+  "low_price": 0.50,
+  "mid_price": 1.25,
+  "high_price": 2.00,
+  "market_price": 1.15,
+  "direct_low_price": 0.45,
+  "sub_type_name": "Normal",
+  "fetched_at": "2024-01-20T08:00:00Z",
+  "raw": {}
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/prices-current/bulk</span>
+                </div>
+                <div class="endpoint-description">
+                    Get multiple current prices by their product IDs in bulk. Maximum 1000 product IDs per request. Products that don't have prices will not be included in the response.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Request Body:</h4>
+                    <div class="param">
+                        <span class="param-name">product_ids</span> <span class="param-type">(array[int], required, min: 1, max: 1000)</span> - List of product IDs to fetch
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">POST /prices-current/bulk</span>
+{
+  "product_ids": [12345, 67890, 11111]
+}</code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>{
+  "prices": [PriceCurrent],
+  "requested_count": int,
+  "found_count": int,
+  "missing_count": int
+}</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "prices": [
+    {
+      "product_id": 12345,
+      "low_price": 0.50,
+      "mid_price": 1.25,
+      "high_price": 2.00,
+      "market_price": 1.15,
+      "direct_low_price": 0.45,
+      "sub_type_name": "Normal",
+      "fetched_at": "2024-01-20T08:00:00Z",
+      "raw": {}
+    },
+    {
+      "product_id": 67890,
+      "low_price": 5.00,
+      "mid_price": 7.50,
+      "high_price": 10.00,
+      "market_price": 7.25,
+      "direct_low_price": 4.75,
+      "sub_type_name": "Holo",
+      "fetched_at": "2024-01-20T08:00:00Z",
+      "raw": {}
+    }
+  ],
+  "requested_count": 3,
+  "found_count": 2,
+  "missing_count": 1
+}</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prices History Section -->
+        <div class="section">
+            <h2 class="section-title">Price History</h2>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/prices-history</span>
+                </div>
+                <div class="endpoint-description">
+                    List price history with pagination and optional date/product filtering. Results are sorted by product_id, then fetched_at.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">page</span> <span class="param-type">(int, optional, default: 1)</span>
+                    </div>
+                    <div class="param">
+                        <span class="param-name">limit</span> <span class="param-type">(int, optional, default: 100, max: 1000)</span>
+                    </div>
+                    <div class="param">
+                        <span class="param-name">start_date</span> <span class="param-type">(datetime, optional, ISO format)</span> - Start date for filtering (YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD)
+                    </div>
+                    <div class="param">
+                        <span class="param-name">end_date</span> <span class="param-type">(datetime, optional, ISO format)</span> - End date for filtering
+                    </div>
+                    <div class="param">
+                        <span class="param-name">product_id</span> <span class="param-type">(int, optional)</span> - Filter by specific product ID
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">GET /prices-history?start_date=2024-01-01&end_date=2024-12-31&product_id=12345</span></code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PaginatedResponse&lt;PriceHistory&gt;</code>
+                    <div class="schema-field">
+                        <span class="schema-field-name">PriceHistory</span> <span class="schema-field-type">object</span>
+                        <div class="schema-field" style="margin-left: 20px;">
+                            <span class="schema-field-name">product_id</span> <span class="schema-field-type">bigint (required)</span><br>
+                            <span class="schema-field-name">fetched_at</span> <span class="schema-field-type">timestamp with time zone (required)</span><br>
+                            <span class="schema-field-name">low_price</span> <span class="schema-field-type">numeric | null</span><br>
+                            <span class="schema-field-name">mid_price</span> <span class="schema-field-type">numeric | null</span><br>
+                            <span class="schema-field-name">high_price</span> <span class="schema-field-type">numeric | null</span><br>
+                            <span class="schema-field-name">market_price</span> <span class="schema-field-type">numeric | null</span><br>
+                            <span class="schema-field-name">direct_low_price</span> <span class="schema-field-type">numeric | null</span><br>
+                            <span class="schema-field-name">sub_type_name</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">raw</span> <span class="schema-field-type">jsonb (default: {})</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [
+    {
+      "product_id": 12345,
+      "fetched_at": "2024-01-20T08:00:00Z",
+      "low_price": 0.50,
+      "mid_price": 1.25,
+      "high_price": 2.00,
+      "market_price": 1.15,
+      "direct_low_price": 0.45,
+      "sub_type_name": "Normal",
+      "raw": {}
+    }
+  ],
+  "page": 1,
+  "limit": 100,
+  "total": 500,
+  "has_more": true
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/prices-history/by-product/{product_id}</span>
+                </div>
+                <div class="endpoint-description">
+                    Get all price history for a specific product. Supports optional date filtering via query parameters.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">start_date</span> <span class="param-type">(datetime, optional, ISO format)</span>
+                    </div>
+                    <div class="param">
+                        <span class="param-name">end_date</span> <span class="param-type">(datetime, optional, ISO format)</span>
+                    </div>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PaginatedResponse&lt;PriceHistory&gt;</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [
+    {
+      "product_id": 12345,
+      "fetched_at": "2024-01-20T08:00:00Z",
+      "low_price": 0.50,
+      "mid_price": 1.25,
+      "high_price": 2.00,
+      "market_price": 1.15,
+      "direct_low_price": 0.45,
+      "sub_type_name": "Normal",
+      "raw": {}
+    }
+  ],
+  "page": 1,
+  "limit": 100,
+  "total": 30,
+  "has_more": false
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/prices-history/by-product-date</span>
+                </div>
+                <div class="endpoint-description">
+                    Get a single price history entry by composite primary key (product_id, fetched_at).
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">product_id</span> <span class="param-type">(bigint, required)</span>
+                    </div>
+                    <div class="param">
+                        <span class="param-name">fetched_at</span> <span class="param-type">(timestamp with time zone, required, ISO format)</span>
+                    </div>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PriceHistory</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "product_id": 12345,
+  "fetched_at": "2024-01-20T08:00:00Z",
+  "low_price": 0.50,
+  "mid_price": 1.25,
+  "high_price": 2.00,
+  "market_price": 1.15,
+  "direct_low_price": 0.45,
+  "sub_type_name": "Normal",
+  "raw": {}
+}</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- Product Extended Data Section -->
+        <div class="section">
+            <h2 class="section-title">Product Extended Data</h2>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/product-extended-data</span>
+                </div>
+                <div class="endpoint-description">
+                    List all product extended data entries with pagination. Results are sorted by product_id, then key.
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PaginatedResponse&lt;ProductExtendedData&gt;</code>
+                    <div class="schema-field">
+                        <span class="schema-field-name">ProductExtendedData</span> <span class="schema-field-type">object</span>
+                        <div class="schema-field" style="margin-left: 20px;">
+                            <span class="schema-field-name">product_id</span> <span class="schema-field-type">bigint (required)</span><br>
+                            <span class="schema-field-name">key</span> <span class="schema-field-type">text (required)</span><br>
+                            <span class="schema-field-name">value</span> <span class="schema-field-type">text | null</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [
+    {
+      "product_id": 12345,
+      "key": "Rarity",
+      "value": "Common"
+    },
+    {
+      "product_id": 12345,
+      "key": "Number",
+      "value": "025"
+    }
+  ],
+  "page": 1,
+  "limit": 100,
+  "total": 5000,
+  "has_more": true
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/product-extended-data/by-category/{category_id}</span>
+                </div>
+                <div class="endpoint-description">
+                    Get all extended data entries for products in a specific category. Results are sorted by product_id, then key and support pagination.
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PaginatedResponse&lt;ProductExtendedData&gt;</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [...],
+  "page": 1,
+  "limit": 100,
+  "total": 2000,
+  "has_more": true
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/product-extended-data/by-category/{category_id}/keys</span>
+                </div>
+                <div class="endpoint-description">
+                    Get unique list of extended data keys for products in a category (returns distinct key names).
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>["Rarity", "Number", "Type", "HP", "Attack"]</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/product-extended-data/by-category/{category_id}/key-values</span>
+                </div>
+                <div class="endpoint-description">
+                    Get unique key-value pairs for products in a category (returns dictionary of key -> list of unique values, useful for filtering).
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "Rarity": ["Common", "Uncommon", "Rare", "Ultra Rare"],
+  "Number": ["001", "002", "003", ...],
+  "Type": ["Fire", "Water", "Grass", "Electric"]
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/product-extended-data/by-product/{product_id}</span>
+                </div>
+                <div class="endpoint-description">
+                    Get all extended data for a product. Results are sorted by key and support pagination.
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PaginatedResponse&lt;ProductExtendedData&gt;</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [
+    {
+      "product_id": 12345,
+      "key": "Rarity",
+      "value": "Common"
+    },
+    {
+      "product_id": 12345,
+      "key": "Number",
+      "value": "025"
+    }
+  ],
+  "page": 1,
+  "limit": 100,
+  "total": 5,
+  "has_more": false
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/product-extended-data/by-product-key</span>
+                </div>
+                <div class="endpoint-description">
+                    Get a single extended data entry by composite primary key (product_id, key).
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">product_id</span> <span class="param-type">(int, required)</span>
+                    </div>
+                    <div class="param">
+                        <span class="param-name">key</span> <span class="param-type">(string, required)</span>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "product_id": 12345,
+  "key": "Rarity",
+  "value": "Common"
+}</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- Category Extended Data Keys Section -->
+        <div class="section">
+            <h2 class="section-title">Category Extended Data Keys</h2>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/category-extended-data-keys</span>
+                </div>
+                <div class="endpoint-description">
+                    List all category extended data keys with pagination. Results are sorted by category_id, then key.
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PaginatedResponse&lt;CategoryExtendedDataKey&gt;</code>
+                    <div class="schema-field">
+                        <span class="schema-field-name">CategoryExtendedDataKey</span> <span class="schema-field-type">object</span>
+                        <div class="schema-field" style="margin-left: 20px;">
+                            <span class="schema-field-name">category_id</span> <span class="schema-field-type">bigint (required)</span><br>
+                            <span class="schema-field-name">key</span> <span class="schema-field-type">text (required)</span><br>
+                            <span class="schema-field-name">first_seen</span> <span class="schema-field-type">timestamp with time zone (required)</span><br>
+                            <span class="schema-field-name">last_seen</span> <span class="schema-field-type">timestamp with time zone (required)</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [
+    {
+      "category_id": 1,
+      "key": "Rarity",
+      "first_seen": "2024-01-01T00:00:00Z",
+      "last_seen": "2024-01-20T08:00:00Z"
+    },
+    {
+      "category_id": 1,
+      "key": "Number",
+      "first_seen": "2024-01-01T00:00:00Z",
+      "last_seen": "2024-01-20T08:00:00Z"
+    }
+  ],
+  "page": 1,
+  "limit": 100,
+  "total": 50,
+  "has_more": false
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/category-extended-data-keys/by-category/{category_id}</span>
+                </div>
+                <div class="endpoint-description">
+                    Get all extended data keys for a specific category. Results are sorted by key and support pagination. Useful for discovering what metadata fields are available for products in a category.
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PaginatedResponse&lt;CategoryExtendedDataKey&gt;</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [
+    {
+      "category_id": 1,
+      "key": "Rarity",
+      "first_seen": "2024-01-01T00:00:00Z",
+      "last_seen": "2024-01-20T08:00:00Z"
+    }
+  ],
+  "page": 1,
+  "limit": 100,
+  "total": 10,
+  "has_more": false
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/category-extended-data-keys/by-category-key</span>
+                </div>
+                <div class="endpoint-description">
+                    Get a single category extended data key by composite primary key (category_id, key).
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">category_id</span> <span class="param-type">(int, required)</span>
+                    </div>
+                    <div class="param">
+                        <span class="param-name">key</span> <span class="param-type">(string, required)</span>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "category_id": 1,
+  "key": "Rarity",
+  "first_seen": "2024-01-01T00:00:00Z",
+  "last_seen": "2024-01-20T08:00:00Z"
+}</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- Favorites Section -->
+        <div class="section">
+            <h2 class="section-title">Favorites</h2>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/favorites</span>
+                </div>
+                <div class="endpoint-description">
+                    Get favorites for a user. Public read access - no authentication required. Returns the user's favorites as JSONB (product_id string -> quantity integer, typically 1 for favorited).<br>
+                    <strong>Note:</strong> Favorites are stored in the profiles table's favorites column.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">user_id</span> <span class="param-type">(string/UUID, required)</span> - User ID to get favorites for
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">GET /favorites?user_id=f4f079f2-2d7f-411b-b309-67dc9f019f57</span></code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>Favorites</code>
+                    <div class="schema-field">
+                        <span class="schema-field-name">Favorites</span> <span class="schema-field-type">object</span>
+                        <div class="schema-field" style="margin-left: 20px;">
+                            <span class="schema-field-name">user_id</span> <span class="schema-field-type">uuid (required)</span><br>
+                            <span class="schema-field-name">favorites</span> <span class="schema-field-type">jsonb (default: {}, dict of product_id string -> quantity integer)</span><br>
+                            <span class="schema-field-name">created_at</span> <span class="schema-field-type">timestamp with time zone | null</span><br>
+                            <span class="schema-field-name">updated_at</span> <span class="schema-field-type">timestamp with time zone | null</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "user_id": "f4f079f2-2d7f-411b-b309-67dc9f019f57",
+  "favorites": {
+    "12345": 1,
+    "67890": 1,
+    "11111": 1
+  },
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-20T08:00:00Z"
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/favorites</span>
+                </div>
+                <div class="endpoint-description">
+                    Update favorites for the current user. Merges new favorites with existing favorites. Items with quantity 0 are automatically removed. <span style="color: #ffc107;">🔒 Requires Authentication</span><br>
+                    <strong>Format:</strong> JSON object where keys are product_id strings (e.g., "12345") and values are integer quantities (typically 1 for favorited).<br>
+                    <strong>Note:</strong> Favorites are stored in the profiles table's favorites column.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Headers:</h4>
+                    <div class="param">
+                        <span class="param-name">Authorization</span> <span class="param-type">(string, required)</span> - Bearer token
+                    </div>
+                    <h4>Request Body:</h4>
+                    <div class="param">
+                        <span class="param-name">favorites</span> <span class="param-type">(object, required)</span> - Dictionary of product_id (string) -> quantity (integer)
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">POST /favorites</span>
+Headers: Authorization: Bearer &lt;token&gt;
+{
+  "favorites": {
+    "12345": 1,
+    "67890": 1
+  }
+}</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "user_id": "f4f079f2-2d7f-411b-b309-67dc9f019f57",
+  "favorites": {
+    "12345": 1,
+    "67890": 1,
+    "11111": 1
+  },
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-20T08:00:00Z"
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method delete">DELETE</span>
+                    <span class="endpoint-path">/favorites</span>
+                </div>
+                <div class="endpoint-description">
+                    Delete favorites from the current user's favorites. <span style="color: #ffc107;">🔒 Requires Authentication</span>
+                </div>
+                <div class="endpoint-params">
+                    <h4>Headers:</h4>
+                    <div class="param">
+                        <span class="param-name">Authorization</span> <span class="param-type">(string, required)</span> - Bearer token
+                    </div>
+                    <h4>Request Body:</h4>
+                    <div class="param">
+                        <span class="param-name">product_ids</span> <span class="param-type">(array of int, required)</span> - List of product IDs to remove from favorites
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">DELETE /favorites</span>
+Headers: Authorization: Bearer &lt;token&gt;
+{
+  "product_ids": [12345, 67890]
+}</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Inventory Section -->
+        <div class="section">
+            <h2 class="section-title">User Inventory <span style="color: #ffc107;">🔒 Requires Authentication</span></h2>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/user-inventory</span>
+                </div>
+                <div class="endpoint-description">
+                    Get inventory for a user. Public read access - no authentication required. Returns the user's inventory with items as JSONB (product_id string -> quantity integer).<br>
+                    <strong>Note:</strong> Inventory is stored in the profiles table's items column.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">user_id</span> <span class="param-type">(string/UUID, required)</span> - User ID to get inventory for
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">GET /user-inventory?user_id=f4f079f2-2d7f-411b-b309-67dc9f019f57</span></code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>UserInventory</code>
+                    <div class="schema-field">
+                        <span class="schema-field-name">UserInventory</span> <span class="schema-field-type">object</span>
+                        <div class="schema-field" style="margin-left: 20px;">
+                            <span class="schema-field-name">user_id</span> <span class="schema-field-type">uuid (required)</span><br>
+                            <span class="schema-field-name">items</span> <span class="schema-field-type">jsonb (default: {}, dict of product_id string -> quantity integer)</span><br>
+                            <span class="schema-field-name">created_at</span> <span class="schema-field-type">timestamp with time zone | null</span><br>
+                            <span class="schema-field-name">updated_at</span> <span class="schema-field-type">timestamp with time zone | null</span><br>
+                            <span class="schema-field-name">total_count</span> <span class="schema-field-type">integer (default: 0)</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "user_id": "f4f079f2-2d7f-411b-b309-67dc9f019f57",
+  "items": {
+    "12345": 5,
+    "67890": 2,
+    "11111": 10
+  },
+  "total_count": 17,
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-20T08:00:00Z"
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/user-inventory/items</span>
+                </div>
+                <div class="endpoint-description">
+                    Update items in inventory for the current user. This is the <strong>only</strong> endpoint for updating inventory items. Merges new items with existing items. Items with quantity 0 are automatically removed. <span style="color: #ffc107;">🔒 Requires Authentication</span><br>
+                    <strong>Format:</strong> JSON object where keys are product_id strings (e.g., "12345") and values are integer quantities (e.g., 5).<br>
+                    <strong>Note:</strong> Inventory is stored in the profiles table's items column.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Headers:</h4>
+                    <div class="param">
+                        <span class="param-name">Authorization</span> <span class="param-type">(string, required)</span> - Bearer token
+                    </div>
+                    <h4>Request Body:</h4>
+                    <div class="param">
+                        <span class="param-name">items</span> <span class="param-type">(object, required)</span> - Dictionary of product_id (string) -> quantity (integer). New items are merged with existing items, overriding duplicates.
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">POST /user-inventory/items</span>
+Headers: Authorization: Bearer &lt;token&gt;
+{
+  "items": {
+    "12345": 5,
+    "67890": 2,
+    "11111": 10
+  }
+}</code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>UserInventory</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "user_id": "f4f079f2-2d7f-411b-b309-67dc9f019f57",
+  "items": {
+    "12345": 5,
+    "67890": 2,
+    "11111": 10
+  },
+  "total_count": 17,
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-20T08:00:00Z"
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method delete">DELETE</span>
+                    <span class="endpoint-path">/user-inventory/items</span>
+                </div>
+                <div class="endpoint-description">
+                    Delete items from inventory for the current user. <span style="color: #ffc107;">🔒 Requires Authentication</span>
+                </div>
+                <div class="endpoint-params">
+                    <h4>Headers:</h4>
+                    <div class="param">
+                        <span class="param-name">Authorization</span> <span class="param-type">(string, required)</span> - Bearer token
+                    </div>
+                    <h4>Request Body:</h4>
+                    <div class="param">
+                        <span class="param-name">product_ids</span> <span class="param-type">(array[int], required, min: 1)</span> - List of product IDs to remove from inventory
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">DELETE /user-inventory/items</span>
+Headers: Authorization: Bearer &lt;token&gt;
+{
+  "product_ids": [12345, 67890]
+}</code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>UserInventory</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "user_id": "f4f079f2-2d7f-411b-b309-67dc9f019f57",
+  "items": {
+    "11111": 10
+  },
+  "total_count": 10,
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-20T08:00:00Z"
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/user-inventory/by-category/stats</span>
+                </div>
+                <div class="endpoint-description">
+                    Get inventory statistics grouped by category for the current user. Returns total quantity and unique product count per category.
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>Array&lt;CategoryStats&gt;</code>
+                    <div class="schema-field">
+                        <span class="schema-field-name">CategoryStats</span> <span class="schema-field-type">object</span>
+                        <div class="schema-field" style="margin-left: 20px;">
+                            <span class="schema-field-name">category_id</span> <span class="schema-field-type">bigint</span><br>
+                            <span class="schema-field-name">total_quantity</span> <span class="schema-field-type">integer</span><br>
+                            <span class="schema-field-name">unique_products</span> <span class="schema-field-type">integer</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>[
+  {
+    "category_id": 1,
+    "total_quantity": 150,
+    "unique_products": 25
+  },
+  {
+    "category_id": 2,
+    "total_quantity": 200,
+    "unique_products": 30
+  }
+]</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profiles Section -->
+        <div class="section">
+            <h2 class="section-title">Profiles</h2>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/profiles</span>
+                </div>
+                <div class="endpoint-description">
+                    Get a user's profile. Public read access - no authentication required. Returns profile data including username, avatar_url, currency, items (inventory), favorites, and timestamps.<br>
+                    <strong>Note:</strong> full_name is excluded from public responses for privacy.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">user_id</span> <span class="param-type">(string/UUID, required)</span> - User ID to get profile for
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">GET /profiles?user_id=f4f079f2-2d7f-411b-b309-67dc9f019f57</span></code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>Profile</code>
+                    <div class="schema-field">
+                        <span class="schema-field-name">Profile</span> <span class="schema-field-type">object</span>
+                        <div class="schema-field" style="margin-left: 20px;">
+                            <span class="schema-field-name">id</span> <span class="schema-field-type">uuid (required)</span><br>
+                            <span class="schema-field-name">username</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">avatar_url</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">currency</span> <span class="schema-field-type">text (required, default: USD)</span><br>
+                            <span class="schema-field-name">items</span> <span class="schema-field-type">jsonb (default: {}, dict of product_id string -> quantity integer)</span><br>
+                            <span class="schema-field-name">favorites</span> <span class="schema-field-type">jsonb (default: {}, dict of product_id string -> quantity integer)</span><br>
+                            <span class="schema-field-name">total_count</span> <span class="schema-field-type">integer (default: 0)</span><br>
+                            <span class="schema-field-name">created_at</span> <span class="schema-field-type">timestamp with time zone (required)</span><br>
+                            <span class="schema-field-name">updated_at</span> <span class="schema-field-type">timestamp with time zone (required)</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "id": "f4f079f2-2d7f-411b-b309-67dc9f019f57",
+  "username": "cardcollector",
+  "avatar_url": "https://example.com/avatar.jpg",
+  "currency": "USD",
+  "items": {
+    "12345": 5,
+    "67890": 2,
+    "11111": 10
+  },
+  "favorites": {
+    "12345": 1,
+    "67890": 1
+  },
+  "total_count": 17,
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-20T08:00:00Z"
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/profiles</span>
+                </div>
+                <div class="endpoint-description">
+                    Update the current user's profile. Requires authentication - users can only update their own profile. Updates any provided fields (username, full_name, avatar_url, currency, items, favorites, total_count). <span style="color: #ffc107;">🔒 Requires Authentication</span><br>
+                    <strong>Note:</strong> Database triggers will automatically update updated_at and calculate total_count from items.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Headers:</h4>
+                    <div class="param">
+                        <span class="param-name">Authorization</span> <span class="param-type">(string, required)</span> - Bearer token
+                    </div>
+                    <h4>Request Body:</h4>
+                    <div class="param">
+                        <span class="param-name">username</span> <span class="param-type">(string, optional)</span> - Username
+                    </div>
+                    <div class="param">
+                        <span class="param-name">full_name</span> <span class="param-type">(string, optional)</span> - Full name
+                    </div>
+                    <div class="param">
+                        <span class="param-name">avatar_url</span> <span class="param-type">(string, optional)</span> - Avatar URL
+                    </div>
+                    <div class="param">
+                        <span class="param-name">currency</span> <span class="param-type">(string, optional)</span> - Default currency code (e.g., USD, EUR, GBP)
+                    </div>
+                    <div class="param">
+                        <span class="param-name">items</span> <span class="param-type">(object, optional)</span> - Inventory items (product_id string -> quantity integer)
+                    </div>
+                    <div class="param">
+                        <span class="param-name">favorites</span> <span class="param-type">(object, optional)</span> - Favorites (product_id string -> quantity integer, typically 1)
+                    </div>
+                    <div class="param">
+                        <span class="param-name">total_count</span> <span class="param-type">(int, optional)</span> - Total inventory count (auto-calculated, but can be set manually)
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">POST /profiles</span>
+Headers: Authorization: Bearer &lt;token&gt;
+{
+  "username": "cardcollector",
+  "full_name": "John Doe",
+  "avatar_url": "https://example.com/avatar.jpg",
+  "currency": "EUR",
+  "items": {
+    "12345": 5,
+    "67890": 2
+  },
+  "favorites": {
+    "12345": 1
+  }
+}</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "id": "f4f079f2-2d7f-411b-b309-67dc9f019f57",
+  "username": "cardcollector",
+  "full_name": "John Doe",
+  "avatar_url": "https://example.com/avatar.jpg",
+  "currency": "EUR",
+  "items": {
+    "12345": 5,
+    "67890": 2
+  },
+  "favorites": {
+    "12345": 1
+  },
+  "total_count": 7,
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-20T08:00:00Z"
+}</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- Deck Lists Section -->
+        <div class="section">
+            <h2 class="section-title">Deck Lists</h2>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/deck-lists</span>
+                </div>
+                <div class="endpoint-description">
+                    List deck lists with optional filtering. Public read access - anyone can view all deck lists. Optional filters: user_id and/or category_id. Results are sorted by updated_at (descending).
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">page</span> <span class="param-type">(int, optional, default: 1)</span>
+                    </div>
+                    <div class="param">
+                        <span class="param-name">limit</span> <span class="param-type">(int, optional, default: 100, max: 1000)</span>
+                    </div>
+                    <div class="param">
+                        <span class="param-name">user_id</span> <span class="param-type">(string/UUID, optional)</span> - Filter by user_id
+                    </div>
+                    <div class="param">
+                        <span class="param-name">category_id</span> <span class="param-type">(int, optional)</span> - Filter by category_id
+                    </div>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>PaginatedResponse&lt;DeckList&gt;</code>
+                    <div class="schema-field">
+                        <span class="schema-field-name">DeckList</span> <span class="schema-field-type">object</span>
+                        <div class="schema-field" style="margin-left: 20px;">
+                            <span class="schema-field-name">deck_list_id</span> <span class="schema-field-type">bigint (required, auto-increment)</span><br>
+                            <span class="schema-field-name">user_id</span> <span class="schema-field-type">uuid (required)</span><br>
+                            <span class="schema-field-name">category_id</span> <span class="schema-field-type">bigint (required)</span><br>
+                            <span class="schema-field-name">name</span> <span class="schema-field-type">text (required)</span><br>
+                            <span class="schema-field-name">items</span> <span class="schema-field-type">jsonb (default: {}, dict of product_id string -> quantity integer)</span><br>
+                            <span class="schema-field-name">created_at</span> <span class="schema-field-type">timestamp with time zone (required)</span><br>
+                            <span class="schema-field-name">updated_at</span> <span class="schema-field-type">timestamp with time zone (required)</span><br>
+                            <span class="schema-field-name">card_count</span> <span class="schema-field-type">integer (required, default: 0)</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "data": [
+    {
+      "deck_list_id": 1,
+      "user_id": "f4f079f2-2d7f-411b-b309-67dc9f019f57",
+      "category_id": 1,
+      "name": "My Deck",
+      "items": {
+        "12345": 4,
+        "67890": 2
+      },
+      "card_count": 6,
+      "created_at": "2024-01-15T10:30:00Z",
+      "updated_at": "2024-01-20T08:00:00Z"
+    }
+  ],
+  "page": 1,
+  "limit": 100,
+  "total": 10,
+  "has_more": false
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/deck-lists/{deck_list_id}</span>
+                </div>
+                <div class="endpoint-description">
+                    Get a single deck list by primary key (deck_list_id). Public read access - no authentication required.
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>DeckList</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "deck_list_id": 1,
+  "user_id": "f4f079f2-2d7f-411b-b309-67dc9f019f57",
+  "category_id": 1,
+  "name": "My Deck",
+  "items": {
+    "12345": 4,
+    "67890": 2
+  },
+  "card_count": 6,
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-20T08:00:00Z"
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/deck-lists</span>
+                </div>
+                <div class="endpoint-description">
+                    Create a new deck list for the current user. <span style="color: #ffc107;">🔒 Requires Authentication</span>
+                </div>
+                <div class="endpoint-params">
+                    <h4>Request Body:</h4>
+                    <div class="param">
+                        <span class="param-name">category_id</span> <span class="param-type">(int, required)</span>
+                    </div>
+                    <div class="param">
+                        <span class="param-name">name</span> <span class="param-type">(string, required)</span>
+                    </div>
+                    <div class="param">
+                        <span class="param-name">items</span> <span class="param-type">(object, optional)</span> - Dictionary of product_id (string) -> quantity (int)
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">POST /deck-lists</span>
+{
+  "category_id": 1,
+  "name": "My Deck",
+  "items": {
+    "12345": 4,
+    "67890": 2
+  }
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method patch">PATCH</span>
+                    <span class="endpoint-path">/deck-lists/{deck_list_id}</span>
+                </div>
+                <div class="endpoint-description">
+                    Update a deck list name for the current user. <span style="color: #ffc107;">🔒 Requires Authentication</span><br>
+                    <strong>Note:</strong> To update items, use <code>POST /deck-lists/{deck_list_id}/items</code> endpoint instead.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Headers:</h4>
+                    <div class="param">
+                        <span class="param-name">Authorization</span> <span class="param-type">(string, required)</span> - Bearer token
+                    </div>
+                    <h4>Request Body:</h4>
+                    <div class="param">
+                        <span class="param-name">name</span> <span class="param-type">(string, optional)</span> - New name for the deck list
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">PATCH /deck-lists/5</span>
+Headers: Authorization: Bearer &lt;token&gt;
+{
+  "name": "Updated Deck Name"
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method delete">DELETE</span>
+                    <span class="endpoint-path">/deck-lists/{deck_list_id}</span>
+                </div>
+                <div class="endpoint-description">
+                    Delete a deck list for the current user. <span style="color: #ffc107;">🔒 Requires Authentication</span>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/deck-lists/{deck_list_id}/items</span>
+                </div>
+                <div class="endpoint-description">
+                    Update items in a deck list for the current user. This is the <strong>only</strong> endpoint for updating deck list items. Merges new items with existing items. Items with quantity 0 are automatically removed. <span style="color: #ffc107;">🔒 Requires Authentication</span><br>
+                    <strong>Format:</strong> JSON object where keys are product_id strings (e.g., "12345") and values are integer quantities (e.g., 4).
+                </div>
+                <div class="endpoint-params">
+                    <h4>Headers:</h4>
+                    <div class="param">
+                        <span class="param-name">Authorization</span> <span class="param-type">(string, required)</span> - Bearer token
+                    </div>
+                    <h4>Request Body:</h4>
+                    <div class="param">
+                        <span class="param-name">items</span> <span class="param-type">(object, required)</span> - Dictionary of product_id (string) -> quantity (integer). New items are merged with existing items, overriding duplicates.
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">POST /deck-lists/5/items</span>
+Headers: Authorization: Bearer &lt;token&gt;
+{
+  "items": {
+    "12345": 4,
+    "67890": 2,
+    "11111": 1
+  }
+}</code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>DeckList</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "deck_list_id": 5,
+  "user_id": "f4f079f2-2d7f-411b-b309-67dc9f019f57",
+  "category_id": 1,
+  "name": "My Deck",
+  "items": {
+    "12345": 4,
+    "67890": 2,
+    "11111": 1
+  },
+  "card_count": 7,
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-20T08:00:00Z"
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method delete">DELETE</span>
+                    <span class="endpoint-path">/deck-lists/{deck_list_id}/items</span>
+                </div>
+                <div class="endpoint-description">
+                    Delete items from a deck list for the current user. <span style="color: #ffc107;">🔒 Requires Authentication</span>
+                </div>
+                <div class="endpoint-params">
+                    <h4>Headers:</h4>
+                    <div class="param">
+                        <span class="param-name">Authorization</span> <span class="param-type">(string, required)</span> - Bearer token
+                    </div>
+                    <h4>Request Body:</h4>
+                    <div class="param">
+                        <span class="param-name">product_ids</span> <span class="param-type">(array[int], required, min: 1)</span> - List of product IDs to remove from the deck list
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">DELETE /deck-lists/5/items</span>
+Headers: Authorization: Bearer &lt;token&gt;
+{
+  "product_ids": [12345, 67890]
+}</code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>DeckList</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "deck_list_id": 5,
+  "user_id": "f4f079f2-2d7f-411b-b309-67dc9f019f57",
+  "category_id": 1,
+  "name": "My Deck",
+  "items": {
+    "11111": 1
+  },
+  "card_count": 1,
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-20T08:00:00Z"
+}</code>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 50px; padding-top: 20px; border-top: 2px solid #ddd; color: #7f8c8d; text-align: center;">
+            <p>TCGHermit API v1.0.0</p>
+            <p>For interactive API exploration, visit <a href="/docs">Swagger UI</a></p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,277 @@
+/* Deck Delta Confirmation Modal - Similar to inventory confirmation */
+.deck-delta-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.deck-delta-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  z-index: 2001;
+  animation: slideUp 0.3s ease;
+  overflow: hidden;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.deck-delta-header {
+  padding: 24px;
+  border-bottom: 2px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f9fafb;
+}
+
+.deck-delta-title {
+  margin: 0;
+  color: #2d3748;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.deck-delta-close {
+  background: none;
+  border: none;
+  font-size: 28px;
+  color: #999;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.deck-delta-close:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.deck-delta-content {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+  background: #fafbfc;
+}
+
+.deck-delta-intro {
+  margin: 0 0 20px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.deck-delta-section {
+  margin-bottom: 24px;
+}
+
+.deck-delta-section:last-child {
+  margin-bottom: 0;
+}
+
+.delta-section-title {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+  font-weight: 700;
+  padding-bottom: 8px;
+  border-bottom: 2px solid;
+}
+
+/* Style section titles based on order (Adding, Updating, Removing) */
+.deck-delta-section:first-of-type .delta-section-title {
+  color: #48bb78;
+  border-bottom-color: #48bb78;
+}
+
+.deck-delta-section:nth-of-type(2) .delta-section-title {
+  color: #667eea;
+  border-bottom-color: #667eea;
+}
+
+.deck-delta-section:nth-of-type(3) .delta-section-title {
+  color: #e53e3e;
+  border-bottom-color: #e53e3e;
+}
+
+.delta-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.delta-list li {
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s ease;
+  font-size: 15px;
+  color: #2d3748;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.delta-list li:hover {
+  background: #f7fafc;
+  border-color: #cbd5e0;
+  transform: translateX(2px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.delta-item-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.delta-item-quantity {
+  font-weight: 600;
+  color: #667eea;
+  margin-left: 12px;
+}
+
+.deck-delta-actions {
+  padding: 20px 24px;
+  border-top: 1px solid #e9ecef;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: #f9fafb;
+}
+
+.deck-delta-actions-left {
+  display: flex;
+  gap: 12px;
+}
+
+.deck-delta-actions-right {
+  display: flex;
+  gap: 12px;
+}
+
+.deck-delta-discard,
+.deck-delta-cancel,
+.deck-delta-confirm {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.deck-delta-discard {
+  background: #fed7d7;
+  color: #742a2a;
+}
+
+.deck-delta-discard:hover:not(:disabled) {
+  background: #fc8181;
+  color: white;
+}
+
+.deck-delta-cancel {
+  background: #f0f0f0;
+  color: #666;
+}
+
+.deck-delta-cancel:hover:not(:disabled) {
+  background: #e0e0e0;
+}
+
+.deck-delta-confirm {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.deck-delta-confirm:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.deck-delta-discard:disabled,
+.deck-delta-cancel:disabled,
+.deck-delta-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .deck-delta-dialog {
+    width: 95%;
+    max-height: 90vh;
+  }
+
+  .deck-delta-header,
+  .deck-delta-content,
+  .deck-delta-actions {
+    padding: 16px 20px;
+  }
+
+  .deck-delta-title {
+    font-size: 20px;
+  }
+
+  .deck-delta-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .deck-delta-actions-left,
+  .deck-delta-actions-right {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .deck-delta-discard,
+  .deck-delta-cancel,
+  .deck-delta-confirm {
+    flex: 1;
+  }
+}
+

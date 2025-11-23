@@ -1,0 +1,174 @@
+"""
+FastAPI application main module.
+"""
+import logging
+import time
+from fastapi import FastAPI, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from src.routers import (
+    categories,
+    groups,
+    products,
+    product_extended_data,
+    prices_current,
+    prices_history,
+    category_extended_data_keys,
+    favorites,
+    user_inventory,
+    deck_lists,
+    profiles,
+)
+
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
+    title="TCGHermit API",
+    description="Backend API for card deck building and trading app",
+    version="1.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# Request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all incoming requests with details."""
+    start_time = time.time()
+    
+    # Log request details
+    method = request.method
+    path = request.url.path
+    query_params = str(request.query_params) if request.query_params else None
+    
+    # Try to read body for POST/PUT/PATCH requests
+    body = None
+    if method in ["POST", "PUT", "PATCH"]:
+        try:
+            body_bytes = await request.body()
+            if body_bytes:
+                body = body_bytes.decode('utf-8')
+                # Re-create request body stream for downstream handlers
+                async def receive():
+                    return {"type": "http.request", "body": body_bytes}
+                request._receive = receive
+        except Exception as e:
+            logger.warning(f"Error reading request body: {e}")
+    
+    # Log request
+    logger.info(
+        f"INCOMING REQUEST: {method} {path}"
+        f"{f'?{query_params}' if query_params else ''}"
+        f"{f' | Body: {body[:500]}...' if body and len(body) > 500 else f' | Body: {body}' if body else ''}"
+    )
+    
+    # Process request
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        logger.error(f"EXCEPTION in request handler: {method} {path} | Error: {e}", exc_info=True)
+        raise
+    
+    # Log response
+    process_time = time.time() - start_time
+    logger.info(
+        f"RESPONSE: {method} {path} -> {response.status_code} "
+        f"(took {process_time:.3f}s)"
+    )
+    
+    return response
+
+# Include routers
+app.include_router(categories.router)
+app.include_router(groups.router)
+app.include_router(products.router)
+app.include_router(product_extended_data.router)
+app.include_router(prices_current.router)
+app.include_router(prices_history.router)
+app.include_router(category_extended_data_keys.router)
+app.include_router(favorites.router)
+app.include_router(user_inventory.router)
+app.include_router(deck_lists.router)
+app.include_router(profiles.router)
+
+# Serve static files (HTML documentation)
+app.mount("/static", StaticFiles(directory="src/static"), name="static")
+
+
+@app.get("/")
+async def root():
+    """Serve the frontend documentation page."""
+    return FileResponse("src/static/index.html")
+
+
+@app.get("/api")
+async def api_info():
+    """API information endpoint."""
+    return {
+        "title": "TCGHermit API",
+        "description": "Backend API for card deck building and trading app",
+        "version": "1.0.0"
+    }
+
+
+@app.get("/health")
+async def health():
+    """Health check endpoint."""
+    return {"status": "healthy"}
+
+
+# Exception handlers for better logging
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Handle HTTP exceptions with detailed logging."""
+    logger.warning(
+        f"HTTP {exc.status_code} ERROR: {request.method} {request.url.path} | "
+        f"Detail: {exc.detail}"
+    )
+    
+    # Special logging for 404s to help debug routing issues
+    if exc.status_code == 404:
+        logger.error(
+            f"404 NOT FOUND: Client tried to access '{request.method} {request.url.path}' "
+            f"| Query params: {request.query_params} | "
+            f"Available routes: /products/bulk, /prices-current/bulk, /prices-history/*"
+        )
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle validation errors with detailed logging."""
+    # Try to get body from request if available
+    body_preview = "N/A"
+    try:
+        if hasattr(request, '_body'):
+            body_preview = str(request._body)[:500]
+    except:
+        pass
+    
+    logger.error(
+        f"VALIDATION ERROR: {request.method} {request.url.path} | "
+        f"Errors: {exc.errors()} | "
+        f"Body preview: {body_preview}"
+    )
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": exc.errors()}
+    )
+
