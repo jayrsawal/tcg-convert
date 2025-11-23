@@ -6,7 +6,7 @@ import NotificationModal from './NotificationModal';
 import ConfirmationModal from './ConfirmationModal';
 import './DeckListsPage.css';
 
-const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true, maxDecks = null, sortBy = null, fetchAllUsers = false, addDeckRedirect = null, skipPricing = false }) => {
+const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true, maxDecks = null, sortBy = null, fetchAllUsers = false, addDeckRedirect = null, skipPricing = false, showUsername = false }) => {
   const navigate = useNavigate();
   const [deckLists, setDeckLists] = useState([]);
   const [loadingDecks, setLoadingDecks] = useState(false);
@@ -535,31 +535,38 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
                     </div>
                   ) : (
                     <>
-                      {(() => {
-                        // Format created date
-                        const createdDate = deck.created_at || deck.created_at_timestamp || deck.timestamp || deck.created || deck.date_created;
-                        let formattedDate = '';
-                        if (createdDate) {
-                          try {
-                            const date = typeof createdDate === 'string' ? new Date(createdDate) : new Date(createdDate * 1000);
-                            if (!isNaN(date.getTime())) {
-                              formattedDate = date.toLocaleDateString('en-US', { 
-                                month: 'short', 
-                                day: 'numeric',
-                                year: 'numeric'
-                              });
-                            }
-                          } catch (e) {
-                            // Invalid date, leave empty
-                          }
-                        }
-                        
-                        return formattedDate ? (
-                          <div className="deck-created-date">
-                            {formattedDate}
+                      <div className="deck-meta-info">
+                        {showUsername && deck.username && (
+                          <div className="deck-username">
+                            @{deck.username}
                           </div>
-                        ) : null;
-                      })()}
+                        )}
+                        {(() => {
+                          // Format created date
+                          const createdDate = deck.created_at || deck.created_at_timestamp || deck.timestamp || deck.created || deck.date_created;
+                          let formattedDate = '';
+                          if (createdDate) {
+                            try {
+                              const date = typeof createdDate === 'string' ? new Date(createdDate) : new Date(createdDate * 1000);
+                              if (!isNaN(date.getTime())) {
+                                formattedDate = date.toLocaleDateString('en-US', { 
+                                  month: 'short', 
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                });
+                              }
+                            } catch (e) {
+                              // Invalid date, leave empty
+                            }
+                          }
+                          
+                          return formattedDate ? (
+                            <div className="deck-created-date">
+                              {formattedDate}
+                            </div>
+                          ) : null;
+                        })()}
+                      </div>
                       {(() => {
                         const metadata = deckMetadata[deckId];
                         if (!metadata) return null;

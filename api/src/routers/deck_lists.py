@@ -79,6 +79,30 @@ async def list_deck_lists(
             .execute()
         )
         
+        # Get usernames for all user_ids in the results
+        deck_lists = response.data if response.data else []
+        user_ids = list(set(dl.get("user_id") for dl in deck_lists if dl.get("user_id")))
+        
+        username_map = {}
+        if user_ids:
+            try:
+                profiles_response = (
+                    db.table("profiles")
+                    .select("id,username")
+                    .in_("id", user_ids)
+                    .execute()
+                )
+                if profiles_response.data:
+                    username_map = {p["id"]: p.get("username") for p in profiles_response.data}
+            except Exception as e:
+                # If username lookup fails, continue without usernames
+                pass
+        
+        # Add username to each deck list
+        for deck_list in deck_lists:
+            user_id = deck_list.get("user_id")
+            deck_list["username"] = username_map.get(user_id) if user_id else None
+        
         # Get count with same filters
         count_query = db.table("deck_lists").select("*", count="exact")
         if user_id:
@@ -96,7 +120,7 @@ async def list_deck_lists(
         has_more = total is not None and (offset + pagination.limit) < total
         
         return PaginatedResponse(
-            data=response.data,
+            data=deck_lists,
             page=pagination.page,
             limit=pagination.limit,
             total=total,
@@ -137,7 +161,25 @@ async def create_deck_list(
         if not response.data:
             raise HTTPException(status_code=500, detail="Failed to create deck list")
         
-        return response.data[0]
+        deck_list = response.data[0]
+        
+        # Get username for the deck list creator
+        try:
+            profile_response = (
+                db.table("profiles")
+                .select("username")
+                .eq("id", str(user_id))
+                .execute()
+            )
+            if profile_response.data and len(profile_response.data) > 0:
+                deck_list["username"] = profile_response.data[0].get("username")
+            else:
+                deck_list["username"] = None
+        except Exception:
+            # If username lookup fails, continue without username
+            deck_list["username"] = None
+        
+        return deck_list
     except HTTPException:
         raise
     except Exception as e:
@@ -187,7 +229,28 @@ async def get_deck_list(
                 detail=f"Deck list with id {deck_list_id} not found"
             )
         
-        return response.data[0]
+        deck_list = response.data[0]
+        
+        # Get username for the deck list creator
+        user_id = deck_list.get("user_id")
+        username = None
+        if user_id:
+            try:
+                profile_response = (
+                    db.table("profiles")
+                    .select("username")
+                    .eq("id", user_id)
+                    .execute()
+                )
+                if profile_response.data and len(profile_response.data) > 0:
+                    username = profile_response.data[0].get("username")
+            except Exception:
+                # If username lookup fails, continue without username
+                pass
+        
+        deck_list["username"] = username
+        
+        return deck_list
     except HTTPException:
         raise
     except Exception as e:
@@ -238,7 +301,29 @@ async def update_deck_list(
         if not response.data:
             raise HTTPException(status_code=500, detail="Failed to update deck list")
         
-        return response.data[0]
+        deck_list = response.data[0]
+        
+        # Get username for the deck list creator
+        user_id_str = deck_list.get("user_id")
+        if user_id_str:
+            try:
+                profile_response = (
+                    db.table("profiles")
+                    .select("username")
+                    .eq("id", user_id_str)
+                    .execute()
+                )
+                if profile_response.data and len(profile_response.data) > 0:
+                    deck_list["username"] = profile_response.data[0].get("username")
+                else:
+                    deck_list["username"] = None
+            except Exception:
+                # If username lookup fails, continue without username
+                deck_list["username"] = None
+        else:
+            deck_list["username"] = None
+        
+        return deck_list
     except HTTPException:
         raise
     except Exception as e:
@@ -364,7 +449,29 @@ async def update_deck_list_items(
                 detail="Failed to update deck list items. The update may have been rejected by the database."
             )
         
-        return response.data[0]
+        deck_list = response.data[0]
+        
+        # Get username for the deck list creator
+        user_id_str = deck_list.get("user_id")
+        if user_id_str:
+            try:
+                profile_response = (
+                    db.table("profiles")
+                    .select("username")
+                    .eq("id", user_id_str)
+                    .execute()
+                )
+                if profile_response.data and len(profile_response.data) > 0:
+                    deck_list["username"] = profile_response.data[0].get("username")
+                else:
+                    deck_list["username"] = None
+            except Exception:
+                # If username lookup fails, continue without username
+                deck_list["username"] = None
+        else:
+            deck_list["username"] = None
+        
+        return deck_list
     except HTTPException:
         raise
     except Exception as e:
@@ -449,7 +556,29 @@ async def delete_deck_list_items(
                 detail="Failed to delete deck list items. The update may have been rejected by the database."
             )
         
-        return response.data[0]
+        deck_list = response.data[0]
+        
+        # Get username for the deck list creator
+        user_id_str = deck_list.get("user_id")
+        if user_id_str:
+            try:
+                profile_response = (
+                    db.table("profiles")
+                    .select("username")
+                    .eq("id", user_id_str)
+                    .execute()
+                )
+                if profile_response.data and len(profile_response.data) > 0:
+                    deck_list["username"] = profile_response.data[0].get("username")
+                else:
+                    deck_list["username"] = None
+            except Exception:
+                # If username lookup fails, continue without username
+                deck_list["username"] = None
+        else:
+            deck_list["username"] = None
+        
+        return deck_list
     except HTTPException:
         raise
     except Exception as e:

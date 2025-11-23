@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchCategories, fetchInventoryStatsByCategory, fetchProductCountsByCategory, fetchCurrentPricesBulk } from '../lib/api';
 import { getUserInventory } from '../lib/inventory';
@@ -241,7 +241,10 @@ const LandingPage = () => {
 
         {/* Recent Decks Section - All Users */}
         <div className="decks-section-home">
-          <h2 className="decks-section-title">New Decks</h2>
+          <div className="decks-section-header">
+            <h2 className="decks-section-title">Recent Decks</h2>
+            <Link to="/deck-lists" className="view-more-link">View More →</Link>
+          </div>
           <DecksSection 
             user={null}
             categoryId={86}
@@ -250,24 +253,9 @@ const LandingPage = () => {
             sortBy="recent"
             fetchAllUsers={true}
             skipPricing={true}
+            showUsername={true}
           />
         </div>
-
-        {/* User's Decks Section */}
-        {user && (
-          <div className="decks-section-home">
-            <h2 className="decks-section-title">Your Decks</h2>
-            <DecksSection 
-              user={user} 
-              categoryId={86}
-              showAddDeck={true}
-              maxDecks={3}
-              sortBy="recent"
-              addDeckRedirect="/deck-lists"
-              skipPricing={true}
-            />
-          </div>
-        )}
       </main>
     </div>
   );

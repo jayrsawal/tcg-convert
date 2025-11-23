@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { fetchUserProfile } from '../lib/api';
 import { HiUser, HiLogout } from 'react-icons/hi';
 import './NavigationBar.css';
 
@@ -9,10 +10,30 @@ const NavigationBar = ({ className = '' }) => {
   const { user, signOut } = useAuth();
   const { selectedCurrency, setSelectedCurrency } = useCurrency();
   const location = useLocation();
+  const [username, setUsername] = useState(null);
 
   const isActive = (path) => {
     return location.pathname === path;
   };
+
+  useEffect(() => {
+    const loadUsername = async () => {
+      if (user?.id) {
+        try {
+          const profile = await fetchUserProfile(user.id);
+          if (profile?.username) {
+            setUsername(profile.username);
+          }
+        } catch (error) {
+          console.error('Error loading username:', error);
+        }
+      } else {
+        setUsername(null);
+      }
+    };
+
+    loadUsername();
+  }, [user?.id]);
 
   return (
     <header className={`navigation-bar ${className}`}>
@@ -41,6 +62,9 @@ const NavigationBar = ({ className = '' }) => {
                 title="Profile"
               >
                 <HiUser className="nav-icon" />
+                {username && (
+                  <span className="nav-username">@{username}</span>
+                )}
                 <span className="nav-icon-text">Profile</span>
               </Link>
               <button 

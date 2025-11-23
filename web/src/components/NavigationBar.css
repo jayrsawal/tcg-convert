@@ -88,6 +88,13 @@
   height: 36px;
 }
 
+.nav-username {
+  font-size: 15px;
+  font-weight: 500;
+  color: #4a5568;
+  margin-left: 4px;
+}
+
 .nav-icon {
   font-size: 20px;
   line-height: 1;

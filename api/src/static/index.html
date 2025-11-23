@@ -2043,6 +2043,7 @@ Headers: Authorization: Bearer &lt;token&gt;
                         <div class="schema-field" style="margin-left: 20px;">
                             <span class="schema-field-name">deck_list_id</span> <span class="schema-field-type">bigint (required, auto-increment)</span><br>
                             <span class="schema-field-name">user_id</span> <span class="schema-field-type">uuid (required)</span><br>
+                            <span class="schema-field-name">username</span> <span class="schema-field-type">string (optional)</span> - Username of the deck list creator<br>
                             <span class="schema-field-name">category_id</span> <span class="schema-field-type">bigint (required)</span><br>
                             <span class="schema-field-name">name</span> <span class="schema-field-type">text (required)</span><br>
                             <span class="schema-field-name">items</span> <span class="schema-field-type">jsonb (default: {}, dict of product_id string -> quantity integer)</span><br>
@@ -2059,6 +2060,7 @@ Headers: Authorization: Bearer &lt;token&gt;
     {
       "deck_list_id": 1,
       "user_id": "f4f079f2-2d7f-411b-b309-67dc9f019f57",
+      "username": "johndoe",
       "category_id": 1,
       "name": "My Deck",
       "items": {
@@ -2095,6 +2097,7 @@ Headers: Authorization: Bearer &lt;token&gt;
                     <code>{
   "deck_list_id": 1,
   "user_id": "f4f079f2-2d7f-411b-b309-67dc9f019f57",
+  "username": "johndoe",
   "category_id": 1,
   "name": "My Deck",
   "items": {
@@ -2221,6 +2224,7 @@ Headers: Authorization: Bearer &lt;token&gt;
                     <code>{
   "deck_list_id": 5,
   "user_id": "f4f079f2-2d7f-411b-b309-67dc9f019f57",
+  "username": "johndoe",
   "category_id": 1,
   "name": "My Deck",
   "items": {
@@ -2270,6 +2274,7 @@ Headers: Authorization: Bearer &lt;token&gt;
                     <code>{
   "deck_list_id": 5,
   "user_id": "f4f079f2-2d7f-411b-b309-67dc9f019f57",
+  "username": "johndoe",
   "category_id": 1,
   "name": "My Deck",
   "items": {

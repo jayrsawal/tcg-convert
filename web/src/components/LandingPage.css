@@ -183,7 +183,6 @@
 .hero-section {
   text-align: center;
   padding: 60px 20px;
-  margin-bottom: 60px;
 }
 
 .hero-title {
@@ -301,12 +300,34 @@
   margin-bottom: 60px;
 }
 
+.decks-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
 .decks-section-title {
   font-size: 28px;
   font-weight: 700;
   color: #1a202c;
-  margin-bottom: 24px;
-  text-align: center;
+  margin: 0;
+}
+
+.view-more-link {
+  color: #667eea;
+  text-decoration: none;
+  font-size: 16px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.view-more-link:hover {
+  color: #5568d3;
+  text-decoration: underline;
 }
 
 .loading-state,
