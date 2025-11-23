@@ -6,6 +6,10 @@ import { getFavorites, toggleFavorite } from '../lib/favorites';
 import { getUserInventory } from '../lib/inventory';
 import { fetchDeckList, updateDeckListName, updateDeckListItems, deleteDeckListItems, fetchCategoryRules } from '../lib/api';
 import { fetchGroupsByCategory, fetchProductExtendedDataKeyValues, filterProducts, searchProducts, fetchProductsBulk, extractExtendedDataFromProduct, fetchCurrentPricesBulk } from '../lib/api';
+import { parseImportText, fetchProductsByCardNumbers, matchProductsToImportLines } from '../lib/importUtils';
+import { calculateDelta as calculateDeltaUtil } from '../lib/deltaUtils';
+import { applyImportExact, getMergedItems } from '../lib/stagingUtils';
+import { buildSidebarItems } from '../lib/sidebarUtils';
 import NavigationBar from './NavigationBar';
 import ProductPreviewModal from './ProductPreviewModal';
 import NotificationModal from './NotificationModal';
@@ -1003,358 +1007,85 @@ const DeckBuilderPage = () => {
       return;
     }
 
-    // Prevent multiple simultaneous imports
-    if (isImporting) {
-      return;
-    }
-
+    if (isImporting) return;
     setIsImporting(true);
 
-    // Parse import text: format is "{quantity}x {card number} {card name}"
-    const lines = importText.trim().split('\n').filter(line => line.trim());
-    const importedItems = {}; // { productId: quantity }
-    const errors = [];
-    const warnings = [];
-
-    // Collect all unique card numbers from import
-    const cardNumbersToFind = new Set();
-    lines.forEach((line) => {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) return;
-      const match = trimmedLine.match(/^(\d+)\s*x?\s*([^\s]+)(?:\s+(.+))?$/);
-      if (match) {
-        cardNumbersToFind.add(match[2].trim());
-      }
-    });
-    
-    console.log('[Import Debug] Card numbers to find:', Array.from(cardNumbersToFind));
-
-    // Search for all products with these card numbers in the category
-    // Use filterProducts with numbers parameter to find all products at once
-    const allFoundProducts = [];
-    const cardNumberToProducts = {}; // { cardNumber: [products] }
-
-    // Initialize empty arrays for all card numbers
-    cardNumbersToFind.forEach(cardNumber => {
-      cardNumberToProducts[cardNumber] = [];
-    });
-
     try {
-      // Make a single request with all card numbers using the numbers parameter
-      // Handle pagination in case there are more than 1000 results
-      if (cardNumbersToFind.size > 0) {
-        let allProductsData = [];
-        let currentPage = 1;
-        let hasMore = true;
-        const limit = 1000; // Max limit per API specification
-
-        // Fetch all pages of results
-        while (hasMore) {
-          const filterParams = {
-            category_id: deckList.category_id,
-            group_id: null,
-            numbers: Array.from(cardNumbersToFind), // Use numbers parameter instead of filters
-            sort_by: 'name',
-            sort_order: 'asc',
-            page: currentPage,
-            limit: limit
-          };
-
-          const response = await filterProducts(filterParams);
-          let productsData = [];
-          let total = 0;
-          let hasMorePages = false;
-          
-          if (response && typeof response === 'object') {
-            if (Array.isArray(response)) {
-              productsData = response;
-            } else if (response.products && Array.isArray(response.products)) {
-              productsData = response.products;
-            } else if (response.data && Array.isArray(response.data)) {
-              productsData = response.data;
-            } else if (response.results && Array.isArray(response.results)) {
-              productsData = response.results;
-            }
-            
-            // Check pagination info
-            total = response.total || response.count || productsData.length;
-            hasMorePages = response.has_more !== undefined ? response.has_more : (productsData.length === limit);
-          }
-
-          if (productsData.length > 0) {
-            allProductsData.push(...productsData);
-          }
-
-          // Check if we need to fetch more pages
-          hasMore = hasMorePages && productsData.length === limit;
-          currentPage++;
-          
-          // Safety limit: don't fetch more than 10 pages (10,000 products max)
-          if (currentPage > 10) {
-            console.warn('Import: Reached pagination limit (10 pages), some products may be missing');
-            break;
-          }
-        }
-
-        if (allProductsData.length > 0) {
-          console.log('[Import Debug] Total products fetched from API:', allProductsData.length);
-          console.log('[Import Debug] Sample products:', allProductsData.slice(0, 3).map(p => ({
-            product_id: p.product_id || p.id,
-            number: p.number || p.Number,
-            name: p.name
-          })));
-          
-          // Fetch prices for all products at once
-          const productIds = allProductsData.map(p => p.product_id || p.id).filter(id => id !== undefined && id !== null);
-          let prices = {};
-          if (productIds.length > 0) {
-            try {
-              prices = await fetchCurrentPricesBulk(productIds);
-            } catch (priceErr) {
-              console.warn('Could not fetch prices for import:', priceErr);
-            }
-          }
-
-          // Normalize card numbers for matching (trim whitespace, handle leading zeros for numeric-only)
-          const normalizeCardNumber = (num) => {
-            if (!num) return null;
-            const str = String(num).trim().toUpperCase();
-            // For numeric-only card numbers, remove leading zeros
-            // For alphanumeric (like "GD01-008"), keep as-is
-            if (/^\d+$/.test(str)) {
-              return str.replace(/^0+/, '') || '0';
-            }
-            return str;
-          };
-
-          // Create a map of normalized card numbers to original card numbers
-          const normalizedCardNumberMap = {};
-          cardNumbersToFind.forEach(originalNumber => {
-            const normalized = normalizeCardNumber(originalNumber);
-            if (!normalizedCardNumberMap[normalized]) {
-              normalizedCardNumberMap[normalized] = [];
-            }
-            normalizedCardNumberMap[normalized].push(originalNumber);
-          });
-
-          // Group products by their number (check both product.number field and extended data)
-          const unmatchedProducts = [];
-          allProductsData.forEach(product => {
-            // First check the product's direct number field
-            let productNumber = product.number || product.Number || null;
-            
-            // If not found, check extended data
-            if (!productNumber) {
-              const extendedData = extractExtendedDataFromProduct(product);
-              extendedData.forEach(item => {
-                const key = (item.key || item.name || '').toUpperCase();
-                if (key === 'NUMBER') {
-                  productNumber = (item.value || item.val || '').trim();
-                }
-              });
-            }
-
-            if (productNumber) {
-              // Normalize the product number for matching
-              const normalizedProductNumber = normalizeCardNumber(productNumber);
-              
-              console.log(`[Import Debug] Product ${product.product_id || product.id}: number="${productNumber}", normalized="${normalizedProductNumber}"`);
-              
-              // Check if this normalized number matches any of our card numbers
-              const matchingCardNumbers = normalizedCardNumberMap[normalizedProductNumber];
-              if (matchingCardNumbers && matchingCardNumbers.length > 0) {
-                console.log(`[Import Debug] Matched product ${product.product_id || product.id} to card numbers:`, matchingCardNumbers);
-                // Add to all matching card numbers (in case of duplicates like "001" and "1")
-                matchingCardNumbers.forEach(cardNumber => {
-                  if (cardNumberToProducts.hasOwnProperty(cardNumber)) {
-                    const productId = String(product.product_id || product.id);
-                    const price = prices[parseInt(productId, 10)];
-                    const marketPrice = price?.market_price || price?.marketPrice;
-                    
-                    cardNumberToProducts[cardNumber].push({
-                      product,
-                      productId,
-                      marketPrice: marketPrice !== null && marketPrice !== undefined 
-                        ? (typeof marketPrice === 'number' ? marketPrice : parseFloat(marketPrice))
-                        : Infinity // If no price, treat as highest
-                    });
-                  }
-                });
-              } else {
-                unmatchedProducts.push({
-                  product_id: product.product_id || product.id,
-                  number: productNumber,
-                  normalized: normalizedProductNumber,
-                  name: product.name
-                });
-              }
-            } else {
-              unmatchedProducts.push({
-                product_id: product.product_id || product.id,
-                number: null,
-                normalized: null,
-                name: product.name
-              });
-            }
-          });
-          
-          console.log('[Import Debug] Unmatched products:', unmatchedProducts);
-          console.log('[Import Debug] Normalized card number map:', Object.keys(normalizedCardNumberMap));
-          console.log('[Import Debug] Card numbers with products:', Object.keys(cardNumberToProducts).filter(cn => cardNumberToProducts[cn].length > 0));
-          console.log('[Import Debug] Card numbers without products:', Object.keys(cardNumberToProducts).filter(cn => cardNumberToProducts[cn].length === 0));
-
-          // Sort each card number's products by market price (lowest first), then by product_id for consistency
-          Object.keys(cardNumberToProducts).forEach(cardNumber => {
-            cardNumberToProducts[cardNumber].sort((a, b) => {
-              if (a.marketPrice !== b.marketPrice) {
-                return a.marketPrice - b.marketPrice;
-              }
-              return (a.productId || '').localeCompare(b.productId || '');
-            });
-          });
-
-          allFoundProducts.push(...allProductsData);
-        }
-      }
-    } catch (err) {
-      console.error('Error during product search:', err);
-      setIsImporting(false);
-      setNotification({
-        isOpen: true,
-        title: 'Import Failed',
-        message: 'Error searching for products. Please try again.',
-        type: 'error'
-      });
-      return;
-    }
-
-    // Parse each line and match to products
-    lines.forEach((line, index) => {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) return;
-
-      // Match format: {quantity}x {card number} {card name}
-      // Also support formats like:
-      // - {quantity} {card number} {card name} (without 'x')
-      // - {quantity}x {card number} (without card name)
-      // - {quantity} {card number} (without 'x' and card name)
-      // The regex matches: quantity (optional x) card_number (optional card_name)
-      const match = trimmedLine.match(/^(\d+)\s*x?\s*([^\s]+)(?:\s+(.+))?$/);
-      if (!match) {
-        errors.push(`Line ${index + 1}: Invalid format. Expected "{quantity}x {card number} [card name]"`);
-        return;
-      }
-
-      const quantity = parseInt(match[1], 10);
-      const cardNumber = match[2].trim();
-      const cardName = match[3] ? match[3].trim() : '';
-
-      if (isNaN(quantity) || quantity < 0) {
-        errors.push(`Line ${index + 1}: Invalid quantity "${match[1]}"`);
-        return;
-      }
-
-      // Find products by card number
-      const productsWithPrices = cardNumberToProducts[cardNumber];
-      if (!productsWithPrices || productsWithPrices.length === 0) {
-        console.log(`[Import Debug] Line ${index + 1}: Card number "${cardNumber}" not found in cardNumberToProducts`);
-        console.log(`[Import Debug] Available card numbers in cardNumberToProducts:`, Object.keys(cardNumberToProducts));
-        warnings.push(`Line ${index + 1}: Card number "${cardNumber}" not found in category`);
-        return;
-      }
+      // Parse import text
+      const { parsed, errors, cardNumbersToFind } = parseImportText(importText);
       
-      console.log(`[Import Debug] Line ${index + 1}: Found ${productsWithPrices.length} product(s) for card number "${cardNumber}"`);
-
-      // Select product: if multiple, try to match by name first, otherwise use lowest price
-      let selectedProduct = productsWithPrices[0];
-      if (productsWithPrices.length > 1) {
-        if (cardName) {
-          const nameMatch = productsWithPrices.find(p => 
-            p.product.name && p.product.name.toLowerCase() === cardName.toLowerCase()
-          );
-          if (nameMatch) {
-            selectedProduct = nameMatch;
-          } else {
-            // Use lowest price (already sorted)
-            warnings.push(`Line ${index + 1}: Multiple products found for card number "${cardNumber}", using lowest price (name "${cardName}" didn't match)`);
-          }
-        } else {
-          // Use lowest price (already sorted)
-          warnings.push(`Line ${index + 1}: Multiple products found for card number "${cardNumber}", using lowest price`);
-        }
+      if (errors.length > 0) {
+        setIsImporting(false);
+        setNotification({
+          isOpen: true,
+          title: 'Import Failed',
+          message: `Errors found:\n\n${errors.join('\n')}`,
+          type: 'error'
+        });
+        return;
       }
 
-      const productId = selectedProduct.productId;
-      if (quantity > 0) {
-        importedItems[productId] = quantity;
-      }
-    });
+      // Fetch products by card numbers
+      const { cardNumberToProducts } = await fetchProductsByCardNumbers(
+        deckList.category_id,
+        cardNumbersToFind
+      );
 
-    // Show errors if any
-    if (errors.length > 0) {
+      // Match products to import lines
+      const { importedItems, errors: matchErrors, warnings } = matchProductsToImportLines(
+        parsed,
+        cardNumberToProducts
+      );
+
+      if (matchErrors.length > 0) {
+        setIsImporting(false);
+        setNotification({
+          isOpen: true,
+          title: 'Import Failed',
+          message: `Errors found:\n\n${matchErrors.join('\n')}${warnings.length > 0 ? '\n\nWarnings:\n' + warnings.join('\n') : ''}`,
+          type: 'error'
+        });
+        return;
+      }
+
+      // Apply import (exact quantities for deck)
+      const newStagedItems = applyImportExact(deckItems, stagedDeckItems, importedItems);
+
+      // Save to history before making changes
+      saveToHistory();
+
+      // Apply staged changes
+      setStagedDeckItems(newStagedItems);
+
+      // Show success message
+      const addedCount = Object.values(importedItems).reduce((sum, qty) => sum + qty, 0);
+      const currentMerged = getMergedItems(deckItems, stagedDeckItems);
+      const removedCount = Object.keys(currentMerged).filter(id => !importedItems[id] && currentMerged[id] > 0).length;
+      let message = `Import successful! ${Object.keys(importedItems).length} card type(s) imported, ${addedCount} total card(s).`;
+      if (removedCount > 0) {
+        message += ` ${removedCount} card type(s) will be removed.`;
+      }
+      if (warnings.length > 0) {
+        message += `\n\nWarnings:\n${warnings.join('\n')}`;
+      }
+
+      setIsImporting(false);
+      setNotification({
+        isOpen: true,
+        title: 'Import Successful',
+        message: message,
+        type: 'success'
+      });
+    } catch (err) {
+      console.error('Error during import:', err);
       setIsImporting(false);
       setNotification({
         isOpen: true,
         title: 'Import Failed',
-        message: `Errors found:\n\n${errors.join('\n')}${warnings.length > 0 ? '\n\nWarnings:\n' + warnings.join('\n') : ''}`,
+        message: 'Error importing deck. Please try again.',
         type: 'error'
       });
-      return;
     }
-
-    // Calculate staged changes
-    // Start with current deck items
-    const currentMerged = { ...deckItems };
-    Object.entries(stagedDeckItems).forEach(([productId, quantity]) => {
-      if (quantity > 0) {
-        currentMerged[productId] = quantity;
-      } else {
-        delete currentMerged[productId];
-      }
-    });
-
-    // Build new staged items
-    const newStagedItems = {};
-    
-    // Add/update items from import
-    Object.entries(importedItems).forEach(([productId, quantity]) => {
-      const currentQuantity = currentMerged[productId] || 0;
-      if (quantity !== currentQuantity) {
-        newStagedItems[productId] = quantity;
-      }
-    });
-
-    // Remove items not in import (set to 0)
-    Object.keys(currentMerged).forEach(productId => {
-      if (!importedItems[productId] && currentMerged[productId] > 0) {
-        newStagedItems[productId] = 0; // Mark for removal
-      }
-    });
-
-    // Save to history before making changes
-    saveToHistory();
-
-    // Apply staged changes
-    setStagedDeckItems(newStagedItems);
-
-    // Show success message
-    const addedCount = Object.values(importedItems).reduce((sum, qty) => sum + qty, 0);
-    const removedCount = Object.keys(currentMerged).filter(id => !importedItems[id] && currentMerged[id] > 0).length;
-    let message = `Import successful! ${Object.keys(importedItems).length} card type(s) imported, ${addedCount} total card(s).`;
-    if (removedCount > 0) {
-      message += ` ${removedCount} card type(s) will be removed.`;
-    }
-    if (warnings.length > 0) {
-      message += `\n\nWarnings:\n${warnings.join('\n')}`;
-    }
-
-    setIsImporting(false);
-    setNotification({
-      isOpen: true,
-      title: 'Import Successful',
-      message: message,
-      type: 'success'
-    });
   };
 
   const handleRemoveFromDeck = (e, productId) => {
@@ -1424,55 +1155,7 @@ const DeckBuilderPage = () => {
 
   // Calculate delta breakdown for confirmation modal
   const calculateDelta = () => {
-    const addedItems = {};
-    const updatedItems = {};
-    const removedItems = [];
-
-    // Merge staged changes with current deck items
-    const mergedItems = { ...deckItems };
-    Object.entries(stagedDeckItems).forEach(([productId, quantity]) => {
-      if (quantity > 0) {
-        mergedItems[productId] = quantity;
-      } else if (quantity === 0) {
-        delete mergedItems[productId];
-      } else {
-        delete mergedItems[productId];
-      }
-    });
-
-    // Find added items (not in original deckItems)
-    Object.entries(mergedItems).forEach(([productId, quantity]) => {
-      if (!(productId in deckItems) && quantity > 0) {
-        addedItems[productId] = quantity;
-      }
-    });
-
-    // Find updated items (quantity changed)
-    Object.entries(mergedItems).forEach(([productId, quantity]) => {
-      const originalQuantity = deckItems[productId] || 0;
-      if (productId in deckItems && quantity !== originalQuantity && quantity > 0) {
-        updatedItems[productId] = {
-          oldQuantity: originalQuantity,
-          newQuantity: quantity
-        };
-      }
-    });
-
-    // Find removed items (were in original but not in merged, or explicitly set to 0)
-    Object.keys(deckItems).forEach(productId => {
-      if (!(productId in mergedItems)) {
-        removedItems.push(productId);
-      }
-    });
-    
-    // Also check staged items explicitly set to 0
-    Object.entries(stagedDeckItems).forEach(([productId, quantity]) => {
-      if (quantity === 0 && !removedItems.includes(productId)) {
-        removedItems.push(productId);
-      }
-    });
-
-    return { addedItems, updatedItems, removedItems, mergedItems };
+    return calculateDeltaUtil(deckItems, stagedDeckItems);
   };
 
   // Actual apply logic (called after confirmation)
@@ -2206,64 +1889,13 @@ const DeckBuilderPage = () => {
               <>
                 <div className="sidebar-content">
                   {(() => {
-                    const cardsInDeck = deckProducts
-                      .map(product => {
-                        const productId = String(product.product_id || product.id);
-                        const quantity = stagedDeckItems[productId] !== undefined 
-                          ? stagedDeckItems[productId] 
-                          : (deckItems[productId] || 0);
-                        
-                        // Determine change status for visual highlighting
-                        const originalQuantity = deckItems[productId] || 0;
-                        const stagedQuantity = stagedDeckItems[productId];
-                        let changeStatus = 'unchanged';
-                        if (stagedQuantity !== undefined) {
-                          if (stagedQuantity > originalQuantity) {
-                            changeStatus = 'added';
-                          } else if (stagedQuantity < originalQuantity) {
-                            changeStatus = 'removed';
-                          }
-                        }
-                        
-                        return { product, productId, quantity, changeStatus };
-                      })
-                      .filter(item => item.quantity > 0)
-                      .sort((a, b) => {
-                        const aAttrs = getProductAttributes(a.productId, a.product);
-                        const bAttrs = getProductAttributes(b.productId, b.product);
-                        
-                        // Sort by color first
-                        const aColor = aAttrs.color || '';
-                        const bColor = bAttrs.color || '';
-                        if (aColor !== bColor) {
-                          return aColor.localeCompare(bColor);
-                        }
-                        
-                        // Then by level (descending)
-                        const aLevel = aAttrs.level || '';
-                        const bLevel = bAttrs.level || '';
-                        if (aLevel !== bLevel) {
-                          // Try to compare as numbers if possible
-                          const aLevelNum = parseInt(aLevel, 10);
-                          const bLevelNum = parseInt(bLevel, 10);
-                          if (!isNaN(aLevelNum) && !isNaN(bLevelNum)) {
-                            return bLevelNum - aLevelNum; // Descending
-                          }
-                          return bLevel.localeCompare(aLevel); // Descending
-                        }
-                        
-                        // Finally by cost (descending)
-                        const aCost = aAttrs.cost !== null ? aAttrs.cost : -Infinity;
-                        const bCost = bAttrs.cost !== null ? bAttrs.cost : -Infinity;
-                        if (aCost !== bCost) {
-                          return bCost - aCost; // Descending
-                        }
-                        
-                        // If all attributes are equal, sort by name as tiebreaker
-                        const aName = (a.product.name || '').toLowerCase();
-                        const bName = (b.product.name || '').toLowerCase();
-                        return aName.localeCompare(bName);
-                      });
+                    const cardsInDeck = buildSidebarItems(
+                      deckProducts,
+                      deckItems,
+                      stagedDeckItems,
+                      getProductAttributes,
+                      'attributes'
+                    );
 
                     return (
                       <SidebarCardList

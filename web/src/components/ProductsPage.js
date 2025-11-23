@@ -5,6 +5,10 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { getFavorites, toggleFavorite } from '../lib/favorites';
 import { getUserInventory, bulkUpdateInventory } from '../lib/inventory';
 import { fetchGroupsByCategory, fetchProductExtendedDataKeyValues, filterProducts, searchProducts, fetchProductsBulk, extractExtendedDataFromProduct, fetchCurrentPricesBulk } from '../lib/api';
+import { parseImportText, fetchProductsByCardNumbers, matchProductsToImportLines } from '../lib/importUtils';
+import { calculateDelta as calculateDeltaUtil } from '../lib/deltaUtils';
+import { applyImportAdditive, applyRemoval, getMergedItems } from '../lib/stagingUtils';
+import { buildSidebarItems } from '../lib/sidebarUtils';
 import NavigationBar from './NavigationBar';
 import ProductPreviewModal from './ProductPreviewModal';
 import NotificationModal from './NotificationModal';
@@ -850,55 +854,7 @@ const ProductsPage = () => {
 
   // Calculate delta for inventory changes
   const calculateInventoryDelta = () => {
-    const addedItems = {};
-    const updatedItems = {};
-    const removedItems = [];
-
-    // Merge staged changes with current inventory
-    const mergedItems = { ...inventory };
-      Object.entries(stagedInventory).forEach(([productId, quantity]) => {
-      if (quantity > 0) {
-        mergedItems[productId] = quantity;
-      } else if (quantity === 0) {
-        delete mergedItems[productId];
-        } else {
-        delete mergedItems[productId];
-      }
-    });
-
-    // Find added items (not in original inventory)
-    Object.entries(mergedItems).forEach(([productId, quantity]) => {
-      if (!(productId in inventory) && quantity > 0) {
-        addedItems[productId] = quantity;
-      }
-    });
-
-    // Find updated items (quantity changed)
-    Object.entries(mergedItems).forEach(([productId, quantity]) => {
-        const originalQuantity = inventory[productId] || 0;
-      if (productId in inventory && quantity !== originalQuantity && quantity > 0) {
-        updatedItems[productId] = {
-          oldQuantity: originalQuantity,
-          newQuantity: quantity
-        };
-      }
-    });
-
-    // Find removed items (were in original but not in merged, or explicitly set to 0)
-    Object.keys(inventory).forEach(productId => {
-      if (!(productId in mergedItems)) {
-        removedItems.push(productId);
-      }
-    });
-    
-    // Also check staged items explicitly set to 0
-      Object.entries(stagedInventory).forEach(([productId, quantity]) => {
-      if (quantity === 0 && !removedItems.includes(productId)) {
-        removedItems.push(productId);
-      }
-    });
-
-    return { addedItems, updatedItems, removedItems, mergedItems };
+    return calculateDeltaUtil(inventory, stagedInventory);
   };
 
   // Actual apply logic (called after confirmation)
@@ -996,324 +952,80 @@ const ProductsPage = () => {
     }
 
     if (isImporting) return;
-
     setIsImporting(true);
 
-    const lines = importText.trim().split('\n').filter(line => line.trim());
-    const importedItems = {}; // { productId: quantity }
-    const errors = [];
-    const warnings = [];
-
-    const cardNumbersToFind = new Set();
-    lines.forEach((line) => {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) return;
-      const match = trimmedLine.match(/^(\d+)\s*x?\s*([^\s]+)(?:\s+(.+))?$/);
-      if (match) {
-        cardNumbersToFind.add(match[2].trim());
-      }
-    });
-
-    const allFoundProducts = [];
-    const cardNumberToProducts = {};
-
-    // Initialize empty arrays for all card numbers
-    cardNumbersToFind.forEach(cardNumber => {
-      cardNumberToProducts[cardNumber] = [];
-    });
-
     try {
-      // Make a single request with all card numbers using the numbers parameter
-      // Handle pagination in case there are more than 1000 results
-      if (cardNumbersToFind.size > 0) {
-        let allProductsData = [];
-        let currentPage = 1;
-        let hasMore = true;
-        const limit = 1000; // Max limit per API specification
-
-        // Fetch all pages of results
-        while (hasMore) {
-          const filterParams = {
-            category_id: parseInt(categoryId, 10),
-            group_id: null,
-            numbers: Array.from(cardNumbersToFind), // Use numbers parameter instead of filters
-            sort_by: 'name',
-            sort_order: 'asc',
-            page: currentPage,
-            limit: limit
-          };
-
-          const response = await filterProducts(filterParams);
-          let productsData = [];
-          let total = 0;
-          let hasMorePages = false;
-          
-          if (response && typeof response === 'object') {
-            if (Array.isArray(response)) {
-              productsData = response;
-            } else if (response.products && Array.isArray(response.products)) {
-              productsData = response.products;
-            } else if (response.data && Array.isArray(response.data)) {
-              productsData = response.data;
-            } else if (response.results && Array.isArray(response.results)) {
-              productsData = response.results;
-            }
-            
-            // Check pagination info
-            total = response.total || response.count || productsData.length;
-            hasMorePages = response.has_more !== undefined ? response.has_more : (productsData.length === limit);
-          }
-
-          if (productsData.length > 0) {
-            allProductsData.push(...productsData);
-          }
-
-          // Check if we need to fetch more pages
-          hasMore = hasMorePages && productsData.length === limit;
-          currentPage++;
-          
-          // Safety limit: don't fetch more than 10 pages (10,000 products max)
-          if (currentPage > 10) {
-            console.warn('Import: Reached pagination limit (10 pages), some products may be missing');
-            break;
-          }
-        }
-
-        if (allProductsData.length > 0) {
-          console.log('[Import Debug] Sample products:', allProductsData);
-          
-          // Fetch prices for all products at once
-          const productIds = allProductsData.map(p => p.product_id || p.id).filter(id => id !== undefined && id !== null);
-          let prices = {};
-          if (productIds.length > 0) {
-            try {
-              prices = await fetchCurrentPricesBulk(productIds);
-            } catch (err) {
-              console.error('Error fetching prices:', err);
-            }
-          }
-
-          // Normalize card numbers for matching (trim whitespace, handle leading zeros for numeric-only)
-          const normalizeCardNumber = (num) => {
-            if (!num) return null;
-            const str = String(num).trim().toUpperCase();
-            // For numeric-only card numbers, remove leading zeros
-            // For alphanumeric (like "GD01-008"), keep as-is
-            if (/^\d+$/.test(str)) {
-              return str.replace(/^0+/, '') || '0';
-            }
-            return str;
-          };
-
-          // Create a map of normalized card numbers to original card numbers
-          const normalizedCardNumberMap = {};
-          cardNumbersToFind.forEach(originalNumber => {
-            const normalized = normalizeCardNumber(originalNumber);
-            if (!normalizedCardNumberMap[normalized]) {
-              normalizedCardNumberMap[normalized] = [];
-            }
-            normalizedCardNumberMap[normalized].push(originalNumber);
-          });
-
-          // Group products by their number (check both product.number field and extended data)
-          const unmatchedProducts = [];
-          allProductsData.forEach(product => {
-            // First check the product's direct number field
-            let productNumber = product.number || product.Number || null;
-            
-            // If not found, check extended data
-            if (!productNumber) {
-              const extendedData = extractExtendedDataFromProduct(product);
-              extendedData.forEach(item => {
-                const key = (item.key || item.name || '').toUpperCase();
-                if (key === 'NUMBER') {
-                  productNumber = (item.value || item.val || '').trim();
-                }
-              });
-            }
-
-            if (productNumber) {
-              // Normalize the product number for matching
-              const normalizedProductNumber = normalizeCardNumber(productNumber);
-              
-              // Check if this normalized number matches any of our card numbers
-              const matchingCardNumbers = normalizedCardNumberMap[normalizedProductNumber];
-              if (matchingCardNumbers && matchingCardNumbers.length > 0) {
-                // Add to all matching card numbers (in case of duplicates like "001" and "1")
-                matchingCardNumbers.forEach(cardNumber => {
-                  if (cardNumberToProducts.hasOwnProperty(cardNumber)) {
-                    const productId = product.product_id || product.id;
-                    const price = prices[parseInt(productId, 10)];
-                    const marketPrice = price?.market_price || price?.marketPrice;
-                    
-                    cardNumberToProducts[cardNumber].push({
-                      product,
-                      productId,
-                      marketPrice: marketPrice !== null && marketPrice !== undefined 
-                        ? (typeof marketPrice === 'number' ? marketPrice : parseFloat(marketPrice))
-                        : Infinity // If no price, treat as highest
-                    });
-                  }
-                });
-              } else {
-                unmatchedProducts.push({
-                  product_id: product.product_id || product.id,
-                  number: productNumber,
-                  normalized: normalizedProductNumber,
-                  name: product.name
-                });
-              }
-            } else {
-              unmatchedProducts.push({
-                product_id: product.product_id || product.id,
-                number: null,
-                normalized: null,
-                name: product.name
-              });
-            }
-          });
-          
-          console.log('[Import Debug] Unmatched products:', unmatchedProducts);
-          console.log('[Import Debug] Normalized card number map:', Object.keys(normalizedCardNumberMap));
-          console.log('[Import Debug] Card numbers with products:', Object.keys(cardNumberToProducts).filter(cn => cardNumberToProducts[cn].length > 0));
-          console.log('[Import Debug] Card numbers without products:', Object.keys(cardNumberToProducts).filter(cn => cardNumberToProducts[cn].length === 0));
-
-          // Sort each card number's products by market price (lowest first), then by product_id for consistency
-          Object.keys(cardNumberToProducts).forEach(cardNumber => {
-            cardNumberToProducts[cardNumber].sort((a, b) => {
-              if (a.marketPrice !== b.marketPrice) {
-                return a.marketPrice - b.marketPrice;
-              }
-              return (a.productId || '').localeCompare(b.productId || '');
-            });
-          });
-
-          allFoundProducts.push(...allProductsData);
-          
-          // Merge imported products into the products map (single source of truth)
-          mergeProductsIntoMap(allProductsData);
-        }
+      // Parse import text
+      const { parsed, errors, cardNumbersToFind } = parseImportText(importText);
+      
+      if (errors.length > 0) {
+        setIsImporting(false);
+        setNotification({
+          isOpen: true,
+          title: 'Import Failed',
+          message: `Errors found:\n\n${errors.join('\n')}`,
+          type: 'error'
+        });
+        return;
       }
+
+      // Fetch products by card numbers
+      const { cardNumberToProducts } = await fetchProductsByCardNumbers(
+        categoryId,
+        cardNumbersToFind,
+        mergeProductsIntoMap
+      );
+
+      // Match products to import lines
+      const { importedItems, errors: matchErrors, warnings } = matchProductsToImportLines(
+        parsed,
+        cardNumberToProducts
+      );
+
+      if (matchErrors.length > 0) {
+        setIsImporting(false);
+        setNotification({
+          isOpen: true,
+          title: 'Import Failed',
+          message: `Errors found:\n\n${matchErrors.join('\n')}${warnings.length > 0 ? '\n\nWarnings:\n' + warnings.join('\n') : ''}`,
+          type: 'error'
+        });
+        return;
+      }
+
+      // Apply import (additive for inventory)
+      const newStagedItems = applyImportAdditive(inventory, stagedInventory, importedItems);
+
+      console.log('[Import Debug] Current merged inventory:', getMergedItems(inventory, stagedInventory));
+      console.log('[Import Debug] Imported items (quantities to add):', importedItems);
+      console.log('[Import Debug] New staged items (after adding):', newStagedItems);
+
+      // Apply staged changes (merged with existing)
+      setStagedInventory(newStagedItems);
+
+      const addedCount = Object.values(importedItems).reduce((sum, qty) => sum + qty, 0);
+      let message = `Import successful! ${Object.keys(importedItems).length} card type(s) imported, ${addedCount} total card(s) added to inventory (staged).`;
+      if (warnings.length > 0) {
+        message += `\n\nWarnings:\n${warnings.join('\n')}`;
+      }
+
+      setIsImporting(false);
+      setNotification({
+        isOpen: true,
+        title: 'Import Successful',
+        message: message,
+        type: 'success'
+      });
     } catch (err) {
-      console.error('Error during product search:', err);
+      console.error('Error during import:', err);
       setIsImporting(false);
       setNotification({
         isOpen: true,
         title: 'Import Failed',
-        message: 'Error searching for products. Please try again.',
+        message: 'Error importing inventory. Please try again.',
         type: 'error'
       });
-      return;
     }
-
-    lines.forEach((line, index) => {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) return;
-
-      const match = trimmedLine.match(/^(\d+)\s*x?\s*([^\s]+)(?:\s+(.+))?$/);
-      if (!match) {
-        errors.push(`Line ${index + 1}: Invalid format. Expected "{quantity}x {card number} [card name]"`);
-        return;
-      }
-
-      const quantity = parseInt(match[1], 10);
-      const cardNumber = match[2].trim();
-      const cardName = match[3] ? match[3].trim() : '';
-
-      if (isNaN(quantity) || quantity < 0) {
-        errors.push(`Line ${index + 1}: Invalid quantity "${match[1]}"`);
-        return;
-      }
-
-      const productsWithPrices = cardNumberToProducts[cardNumber];
-      if (!productsWithPrices || productsWithPrices.length === 0) {
-        warnings.push(`Line ${index + 1}: Card number "${cardNumber}" not found in category`);
-        return;
-      }
-
-      let selectedProduct = productsWithPrices[0];
-      if (productsWithPrices.length > 1) {
-        if (cardName) {
-          const nameMatch = productsWithPrices.find(p => 
-            p.product.name && p.product.name.toLowerCase() === cardName.toLowerCase()
-          );
-          if (nameMatch) {
-            selectedProduct = nameMatch;
-          } else {
-            warnings.push(`Line ${index + 1}: Multiple products found for card number "${cardNumber}", using lowest price (name "${cardName}" didn't match)`);
-          }
-        } else {
-          warnings.push(`Line ${index + 1}: Multiple products found for card number "${cardNumber}", using lowest price`);
-        }
-      }
-
-      const productId = selectedProduct.productId;
-      if (quantity > 0) {
-        const productIdStr = String(productId);
-        // Import sets exact quantity (not additive)
-        importedItems[productIdStr] = quantity;
-      }
-    });
-    console.log('[Import Debug] Imported Items:', importedItems);
-    if (errors.length > 0) {
-      setIsImporting(false);
-      setNotification({
-        isOpen: true,
-        title: 'Import Failed',
-        message: `Errors found:\n\n${errors.join('\n')}${warnings.length > 0 ? '\n\nWarnings:\n' + warnings.join('\n') : ''}`,
-        type: 'error'
-      });
-      return;
-    }
-
-    // Calculate staged inventory changes based on import (ADDITIVE)
-    // Start with current inventory (base state)
-    const currentMerged = { ...inventory };
-    // Apply any existing staged changes to get the current effective state
-    Object.entries(stagedInventory).forEach(([productId, quantity]) => {
-      if (quantity > 0) {
-        currentMerged[productId] = quantity;
-      } else {
-        delete currentMerged[productId];
-      }
-    });
-
-    // Build new staged items by ADDING imported quantities to existing
-    // Merge with existing staged changes instead of replacing
-    const newStagedItems = { ...stagedInventory };
-    
-    // Add quantities from import (additive)
-    Object.entries(importedItems).forEach(([productId, quantityToAdd]) => {
-      const currentQuantity = currentMerged[productId] || 0;
-      const newQuantity = currentQuantity + quantityToAdd; // ADD to existing
-      if (newQuantity > 0) {
-        newStagedItems[productId] = newQuantity;
-      } else {
-        // If result is 0 or less, remove from staged (or don't add)
-        delete newStagedItems[productId];
-      }
-    });
-
-    console.log('[Import Debug] Current merged inventory:', currentMerged);
-    console.log('[Import Debug] Imported items (quantities to add):', importedItems);
-    console.log('[Import Debug] New staged items (after adding):', newStagedItems);
-
-    // Apply staged changes (merged with existing)
-    setStagedInventory(newStagedItems);
-
-    const addedCount = Object.values(importedItems).reduce((sum, qty) => sum + qty, 0);
-    let message = `Import successful! ${Object.keys(importedItems).length} card type(s) imported, ${addedCount} total card(s) added to inventory (staged).`;
-    if (warnings.length > 0) {
-      message += `\n\nWarnings:\n${warnings.join('\n')}`;
-    }
-
-    setIsImporting(false);
-    setNotification({
-      isOpen: true,
-      title: 'Import Successful',
-      message: message,
-      type: 'success'
-    });
   };
 
   const handleRemoveInventory = async (removeText) => {
@@ -1331,297 +1043,107 @@ const ProductsPage = () => {
 
     setIsRemoving(true);
 
-    const lines = removeText.trim().split('\n').filter(line => line.trim());
-    const removedItems = {}; // { productId: quantity }
-    const errors = [];
-    const warnings = [];
-
-    const cardNumbersToFind = new Set();
-    lines.forEach((line) => {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) return;
-      const match = trimmedLine.match(/^(\d+)\s*x?\s*([^\s]+)(?:\s+(.+))?$/);
-      if (match) {
-        cardNumbersToFind.add(match[2].trim());
-      }
-    });
-
-    // Initialize empty arrays for all card numbers
-    const cardNumberToProducts = {};
-    cardNumbersToFind.forEach(cardNumber => {
-      cardNumberToProducts[cardNumber] = [];
-    });
-
     try {
-      // Make a single request with all card numbers using the numbers parameter
-      // Handle pagination in case there are more than 1000 results
-      if (cardNumbersToFind.size > 0) {
-        let allProductsData = [];
-        let currentPage = 1;
-        let hasMore = true;
-        const limit = 1000; // Max limit per API specification
-
-        // Fetch all pages of results
-        while (hasMore) {
-          const filterParams = {
-            category_id: parseInt(categoryId, 10),
-            group_id: null,
-            numbers: Array.from(cardNumbersToFind), // Use numbers parameter instead of filters
-            sort_by: 'name',
-            sort_order: 'asc',
-            page: currentPage,
-            limit: limit
-          };
-
-          const response = await filterProducts(filterParams);
-          let productsData = [];
-          let total = 0;
-          let hasMorePages = false;
-          
-          if (response && typeof response === 'object') {
-            if (Array.isArray(response)) {
-              productsData = response;
-            } else if (response.products && Array.isArray(response.products)) {
-              productsData = response.products;
-            } else if (response.data && Array.isArray(response.data)) {
-              productsData = response.data;
-            } else if (response.results && Array.isArray(response.results)) {
-              productsData = response.results;
-            }
-            
-            // Check pagination info
-            total = response.total || response.count || productsData.length;
-            hasMorePages = response.has_more !== undefined ? response.has_more : (productsData.length === limit);
-          }
-
-          if (productsData.length > 0) {
-            allProductsData.push(...productsData);
-          }
-
-          // Check if we need to fetch more pages
-          hasMore = hasMorePages && productsData.length === limit;
-          currentPage++;
-          
-          // Safety limit: don't fetch more than 10 pages (10,000 products max)
-          if (currentPage > 10) {
-            console.warn('Remove: Reached pagination limit (10 pages), some products may be missing');
-            break;
-          }
-        }
-
-        if (allProductsData.length > 0) {
-          // Fetch prices for all products at once
-          const productIds = allProductsData.map(p => p.product_id || p.id).filter(id => id !== undefined && id !== null);
-          let prices = {};
-          if (productIds.length > 0) {
-            try {
-              prices = await fetchCurrentPricesBulk(productIds);
-            } catch (err) {
-              console.error('Error fetching prices:', err);
-            }
-          }
-
-          // Normalize card numbers for matching (trim whitespace, handle leading zeros for numeric-only)
-          const normalizeCardNumber = (num) => {
-            if (!num) return null;
-            const str = String(num).trim().toUpperCase();
-            // If it's purely numeric (after removing any separators), remove leading zeros
-            // Otherwise, keep as-is (for alphanumeric like "GD01-008")
-            const numericOnly = str.replace(/[^0-9]/g, '');
-            if (numericOnly === str.replace(/[^A-Z0-9-]/g, '')) {
-              // It's numeric-only, remove leading zeros
-              return numericOnly.replace(/^0+/, '') || '0';
-            }
-            return str;
-          };
-
-          // Build a map of normalized card numbers to products
-          const normalizedCardNumberMap = {};
-          allProductsData.forEach(product => {
-            // Try to get card number from product.number first, then from extended data
-            let cardNumber = product.number;
-            if (!cardNumber && product.extended_data && Array.isArray(product.extended_data)) {
-              const numberData = product.extended_data.find(item => 
-                (item.key || item.name || '').toUpperCase() === 'NUMBER'
-              );
-              if (numberData) {
-                cardNumber = numberData.value || numberData.val;
-              }
-            }
-            
-            if (cardNumber) {
-              const normalized = normalizeCardNumber(cardNumber);
-              if (normalized) {
-                if (!normalizedCardNumberMap[normalized]) {
-                  normalizedCardNumberMap[normalized] = [];
-                }
-                normalizedCardNumberMap[normalized].push(product);
-              }
-            }
-          });
-
-          // Match products to card numbers (using normalized versions)
-          cardNumbersToFind.forEach(cardNumber => {
-            const normalized = normalizeCardNumber(cardNumber);
-            if (normalized && normalizedCardNumberMap[normalized]) {
-              const productsWithPrices = normalizedCardNumberMap[normalized].map(product => {
-                const productId = product.product_id || product.id;
-                const price = prices[parseInt(productId, 10)];
-                const marketPrice = price?.market_price || price?.marketPrice;
-                return {
-                  product,
-                  productId,
-                  marketPrice: marketPrice !== null && marketPrice !== undefined 
-                    ? (typeof marketPrice === 'number' ? marketPrice : parseFloat(marketPrice))
-                    : Infinity
-                };
-              });
-
-              productsWithPrices.sort((a, b) => {
-                if (a.marketPrice !== b.marketPrice) {
-                  return a.marketPrice - b.marketPrice;
-                }
-                return (a.productId || '').localeCompare(b.productId || '');
-              });
-
-              cardNumberToProducts[cardNumber] = productsWithPrices;
-            }
-          });
-
-          // Merge products into the products map (single source of truth)
-          mergeProductsIntoMap(allProductsData);
-        }
-      }
-    } catch (err) {
-      console.error('Error during product search:', err);
-      setIsRemoving(false);
-      setNotification({
-        isOpen: true,
-        title: 'Remove Failed',
-        message: 'Error searching for products. Please try again.',
-        type: 'error'
-      });
-        return;
-      }
-
-    lines.forEach((line, index) => {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) return;
-
-      const match = trimmedLine.match(/^(\d+)\s*x?\s*([^\s]+)(?:\s+(.+))?$/);
-      if (!match) {
-        errors.push(`Line ${index + 1}: Invalid format. Expected "{quantity}x {card number} [card name]"`);
-        return;
-      }
-
-      const quantity = parseInt(match[1], 10);
-      const cardNumber = match[2].trim();
-      const cardName = match[3] ? match[3].trim() : '';
-
-      if (isNaN(quantity) || quantity < 0) {
-        errors.push(`Line ${index + 1}: Invalid quantity "${match[1]}"`);
-        return;
-      }
-
-      const productsWithPrices = cardNumberToProducts[cardNumber];
-      if (!productsWithPrices || productsWithPrices.length === 0) {
-        warnings.push(`Line ${index + 1}: Card number "${cardNumber}" not found in category`);
-        return;
-      }
+      // Parse remove text (same format as import)
+      const { parsed, errors, cardNumbersToFind } = parseImportText(removeText);
       
-      let selectedProduct = productsWithPrices[0];
-      if (productsWithPrices.length > 1) {
-        if (cardName) {
-          const nameMatch = productsWithPrices.find(p => 
-            p.product.name && p.product.name.toLowerCase() === cardName.toLowerCase()
-          );
-          if (nameMatch) {
-            selectedProduct = nameMatch;
-          } else {
-            warnings.push(`Line ${index + 1}: Multiple products found for card number "${cardNumber}", using lowest price (name "${cardName}" didn't match)`);
-          }
-        } else {
-          warnings.push(`Line ${index + 1}: Multiple products found for card number "${cardNumber}", using lowest price`);
+      if (errors.length > 0) {
+        setIsRemoving(false);
+        setNotification({
+          isOpen: true,
+          title: 'Remove Failed',
+          message: `Errors found:\n\n${errors.join('\n')}`,
+          type: 'error'
+        });
+        return;
+      }
+
+      // Fetch products by card numbers
+      const { cardNumberToProducts } = await fetchProductsByCardNumbers(
+        categoryId,
+        cardNumbersToFind,
+        mergeProductsIntoMap
+      );
+
+      // Match products to remove lines and calculate quantities after removal
+      const removedItems = {}; // { productId: quantityAfterRemoval }
+      const warnings = [];
+
+      parsed.forEach(({ quantity, cardNumber, cardName, lineIndex }) => {
+        const productsWithPrices = cardNumberToProducts[cardNumber];
+        if (!productsWithPrices || productsWithPrices.length === 0) {
+          warnings.push(`Line ${lineIndex}: Card number "${cardNumber}" not found in category`);
+          return;
         }
-      }
 
-      const productId = selectedProduct.productId;
-      if (quantity > 0) {
-        const productIdStr = String(productId);
-        const currentQuantity = stagedInventory[productIdStr] !== undefined 
-          ? stagedInventory[productIdStr] 
-          : (inventory[productIdStr] || 0);
-        removedItems[productIdStr] = Math.max(0, currentQuantity - quantity); // Subtractive remove (clamped at 0)
-      }
-    });
+        // Select product (same logic as import)
+        let selectedProduct = productsWithPrices[0];
+        if (productsWithPrices.length > 1) {
+          if (cardName) {
+            const nameMatch = productsWithPrices.find(p => 
+              p.product.name && p.product.name.toLowerCase() === cardName.toLowerCase()
+            );
+            if (nameMatch) {
+              selectedProduct = nameMatch;
+            } else {
+              warnings.push(`Line ${lineIndex}: Multiple products found for card number "${cardNumber}", using lowest price (name "${cardName}" didn't match)`);
+            }
+          } else {
+            warnings.push(`Line ${lineIndex}: Multiple products found for card number "${cardNumber}", using lowest price`);
+          }
+        }
 
-    console.log('[Remove Debug] Removed Items:', removedItems);
-
-    if (errors.length > 0) {
-      setIsRemoving(false);
-      setNotification({
-        isOpen: true,
-        title: 'Remove Failed',
-        message: `Errors found:\n\n${errors.join('\n')}${warnings.length > 0 ? '\n\nWarnings:\n' + warnings.join('\n') : ''}`,
-        type: 'error'
+        const productId = selectedProduct.productId;
+        if (quantity > 0) {
+          const productIdStr = String(productId);
+          const currentQuantity = stagedInventory[productIdStr] !== undefined 
+            ? stagedInventory[productIdStr] 
+            : (inventory[productIdStr] || 0);
+          removedItems[productIdStr] = Math.max(0, currentQuantity - quantity); // Subtractive remove (clamped at 0)
+        }
       });
-      return;
-    }
 
-    // Calculate staged inventory changes based on removal (SUBTRACTIVE)
-    // Start with current inventory (base state)
-    const currentMerged = { ...inventory };
-    // Apply any existing staged changes to get the current effective state
-    Object.entries(stagedInventory).forEach(([productId, quantity]) => {
-      if (quantity > 0) {
-        currentMerged[productId] = quantity;
-      } else {
-        delete currentMerged[productId];
-      }
-    });
+      console.log('[Remove Debug] Removed Items:', removedItems);
 
-    // Build new staged items by SUBTRACTING removed quantities from existing
-    // Merge with existing staged changes instead of replacing
-    const newStagedItems = { ...stagedInventory };
-    
-    // Subtract quantities from removal (subtractive)
-    Object.entries(removedItems).forEach(([productId, quantityAfterRemoval]) => {
-      const currentQuantity = currentMerged[productId] || 0;
-      if (quantityAfterRemoval > 0) {
-        newStagedItems[productId] = quantityAfterRemoval;
-      } else {
-        // If result is 0 or less, mark for removal
-        newStagedItems[productId] = 0;
-      }
-    });
+      // Apply removal (subtractive)
+      const newStagedItems = applyRemoval(inventory, stagedInventory, removedItems);
 
-    console.log('[Remove Debug] Current merged inventory:', currentMerged);
-    console.log('[Remove Debug] Removed items (quantities after removal):', removedItems);
-    console.log('[Remove Debug] New staged items (after removal):', newStagedItems);
+      console.log('[Remove Debug] Current merged inventory:', getMergedItems(inventory, stagedInventory));
+      console.log('[Remove Debug] Removed items (quantities after removal):', removedItems);
+      console.log('[Remove Debug] New staged items (after removal):', newStagedItems);
 
-    // Apply staged changes (merged with existing)
-    setStagedInventory(newStagedItems);
+      // Apply staged changes (merged with existing)
+      setStagedInventory(newStagedItems);
 
-    const removedCount = Object.entries(removedItems).reduce((sum, [productId, newQty]) => {
-      const productIdStr = String(productId);
-      const currentQuantity = stagedInventory[productIdStr] !== undefined 
-        ? stagedInventory[productIdStr] 
-        : (inventory[productIdStr] || 0);
-      return sum + Math.max(0, currentQuantity - newQty);
-    }, 0);
+      const currentMerged = getMergedItems(inventory, stagedInventory);
+      const removedCount = Object.entries(removedItems).reduce((sum, [productId, newQty]) => {
+        const productIdStr = String(productId);
+        const currentQuantity = currentMerged[productIdStr] || 0;
+        return sum + Math.max(0, currentQuantity - newQty);
+      }, 0);
     
     let message = `Remove successful! ${removedCount} total card(s) removed.`;
     if (warnings.length > 0) {
       message += `\n\nWarnings:\n${warnings.join('\n')}`;
     }
 
-    setIsRemoving(false);
-    setNotification({
-      isOpen: true,
-      title: 'Remove Successful',
-      message: message,
-      type: 'success'
-    });
+      setIsRemoving(false);
+      setNotification({
+        isOpen: true,
+        title: 'Remove Successful',
+        message: message,
+        type: 'success'
+      });
+    } catch (err) {
+      console.error('Error during remove:', err);
+      setIsRemoving(false);
+      setNotification({
+        isOpen: true,
+        title: 'Remove Failed',
+        message: 'Error removing from inventory. Please try again.',
+        type: 'error'
+      });
+    }
   };
 
   const convertCurrency = (usdValue) => {
@@ -1993,33 +1515,13 @@ const ProductsPage = () => {
                   <div className="sidebar-content">
                     {(() => {
                       const allProductsArray = Object.values(productsMap);
-                      const inventoryItems = allProductsArray
-                        .map(product => {
-                          const productId = String(product.product_id || product.id);
-                          const quantity = stagedInventory[productId] !== undefined 
-                            ? stagedInventory[productId] 
-                            : (inventory[productId] || 0);
-                            
-                            // Determine change status for visual highlighting
-                            const originalQuantity = inventory[productId] || 0;
-                            const stagedQuantity = stagedInventory[productId];
-                            let changeStatus = 'unchanged';
-                            if (stagedQuantity !== undefined) {
-                              if (stagedQuantity > originalQuantity) {
-                                changeStatus = 'added';
-                              } else if (stagedQuantity < originalQuantity) {
-                                changeStatus = 'removed';
-                              }
-                            }
-                          
-                          return { product, productId, quantity, changeStatus };
-                        })
-                        .filter(item => item.quantity > 0)
-                        .sort((a, b) => {
-                          const aName = (a.product.name || '').toLowerCase();
-                          const bName = (b.product.name || '').toLowerCase();
-                          return aName.localeCompare(bName);
-                        });
+                      const inventoryItems = buildSidebarItems(
+                        allProductsArray,
+                        inventory,
+                        stagedInventory,
+                        null,
+                        'name'
+                      );
                             
                             return (
                         <SidebarCardList
