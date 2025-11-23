@@ -756,8 +756,22 @@ const DeckBuilderPage = () => {
         const calculatedHasMore = total > 0 ? itemsLoaded < total : hasMore;
         // Use API's has_more if available, otherwise use calculated value
         setHasMorePages(calculatedHasMore);
-        // Reset newly added IDs when replacing
-        setNewlyAddedProductIds(new Set());
+        
+        // Track all products as newly added for fade-in animation
+        if (productsData.length > 0) {
+          const newProductIds = new Set(
+            productsData.map(p => String(p.product_id || p.id))
+          );
+          setNewlyAddedProductIds(newProductIds);
+          
+          // Clear animation class after animation completes
+          setTimeout(() => {
+            setNewlyAddedProductIds(new Set());
+          }, 600); // Match animation duration
+        } else {
+          // Reset newly added IDs when no products
+          setNewlyAddedProductIds(new Set());
+        }
       }
       
       setTotalCount(total);

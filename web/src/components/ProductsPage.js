@@ -51,6 +51,7 @@ const ProductsPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [hasMorePages, setHasMorePages] = useState(true); // Start as true to trigger initial load
+  const [newlyAddedProductIds, setNewlyAddedProductIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [loadingGroups, setLoadingGroups] = useState(true);
   const [loadingAttributes, setLoadingAttributes] = useState(true);
@@ -413,6 +414,19 @@ const ProductsPage = () => {
           // Only set hasMorePages if we actually got products or haven't reached total
           setHasMorePages(calculatedHasMore && actuallyAddedProducts);
           
+          // Track newly added product IDs for animation
+          if (newProducts.length > 0) {
+            const newProductIds = new Set(
+              newProducts.map(p => String(p.product_id || p.id))
+            );
+            setNewlyAddedProductIds(newProductIds);
+            
+            // Clear animation class after animation completes
+            setTimeout(() => {
+              setNewlyAddedProductIds(new Set());
+            }, 600); // Match animation duration
+          }
+          
           return updatedProducts;
         });
       } else {
@@ -432,6 +446,22 @@ const ProductsPage = () => {
         });
         // Use API's has_more if available, otherwise use calculated value
         setHasMorePages(calculatedHasMore);
+        
+        // Track all products as newly added for fade-in animation
+        if (productsData.length > 0) {
+          const newProductIds = new Set(
+            productsData.map(p => String(p.product_id || p.id))
+          );
+          setNewlyAddedProductIds(newProductIds);
+          
+          // Clear animation class after animation completes
+          setTimeout(() => {
+            setNewlyAddedProductIds(new Set());
+          }, 600); // Match animation duration
+        } else {
+          // Reset newly added IDs when no products
+          setNewlyAddedProductIds(new Set());
+        }
       }
       
       setTotalCount(total);
@@ -1722,6 +1752,7 @@ const ProductsPage = () => {
               totalCount={totalCount}
               hasMorePages={hasMorePages}
               onLoadMore={loadMoreProducts}
+              newlyAddedProductIds={newlyAddedProductIds}
               
               // User and permissions
               user={user}

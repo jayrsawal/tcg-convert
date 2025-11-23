@@ -114,6 +114,18 @@ const ProductListingContent = ({
 
   // Infinite scroll with Intersection Observer
   const sentinelRef = useRef(null);
+  const hasScrolledRef = useRef(false);
+  const isInitialMountRef = useRef(true);
+
+  // Track if user has scrolled
+  useEffect(() => {
+    const handleScroll = () => {
+      hasScrolledRef.current = true;
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -136,6 +148,13 @@ const ProductListingContent = ({
       (entries) => {
         const [entry] = entries;
         if (entry.isIntersecting && !loadingMore && hasMorePages) {
+          // On initial mount, if sentinel is already visible, wait for user to scroll
+          // This prevents auto-loading page 2 immediately on page load
+          if (isInitialMountRef.current && !hasScrolledRef.current) {
+            // Mark that we've seen the initial intersection, but don't load yet
+            return;
+          }
+          
           // Only load if we have filtered products or no products at all
           if (filteredProducts.length > 0 || products.length === 0) {
             onLoadMore();
@@ -150,13 +169,28 @@ const ProductListingContent = ({
     );
 
     observer.observe(sentinel);
+    
+    // Mark that initial mount is complete after a brief delay
+    // This allows the observer to check if sentinel is initially visible
+    const mountTimeout = setTimeout(() => {
+      isInitialMountRef.current = false;
+    }, 100);
 
     return () => {
+      clearTimeout(mountTimeout);
       if (sentinel) {
         observer.unobserve(sentinel);
       }
     };
   }, [hasMorePages, loadingMore, onLoadMore, products.length, filteredProducts.length]);
+  
+  // Reset flags when products change significantly (new search/filter/category)
+  // Use a stable key based on product counts to detect significant changes
+  const productChangeKey = filteredProducts.length === 0 ? products.length : filteredProducts.length;
+  useEffect(() => {
+    isInitialMountRef.current = true;
+    hasScrolledRef.current = false;
+  }, [productChangeKey]);
 
   return (
     <div className="products-container">
