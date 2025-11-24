@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { useTCGPercentage } from '../contexts/TCGPercentageContext';
 import { getFavorites, toggleFavorite } from '../lib/favorites';
 import { getUserInventory, bulkUpdateInventory } from '../lib/inventory';
 import { fetchGroupsByCategory, fetchProductExtendedDataKeyValues, filterProducts, searchProducts, fetchProductsBulk, extractExtendedDataFromProduct, fetchCurrentPricesBulk } from '../lib/api';
@@ -27,6 +28,7 @@ const ProductsPage = () => {
   const categoryId = categoryIdParam || '86';
   const { user } = useAuth();
   const { selectedCurrency, setSelectedCurrency, currencyRates, loadingRates } = useCurrency();
+  const { selectedTCGPercentage } = useTCGPercentage();
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
   // Single source of truth: products map keyed by product_id
@@ -70,7 +72,11 @@ const ProductsPage = () => {
   const [histogramsMinimized, setHistogramsMinimized] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
-  const [maxPercentage, setMaxPercentage] = useState(100);
+  // Initialize maxPercentage with user's TCG percentage preference, or default to 100
+  const [maxPercentage, setMaxPercentage] = useState(() => {
+    const value = selectedTCGPercentage;
+    return (value !== null && value !== undefined && !isNaN(value)) ? value : 100;
+  });
   const [showDeltaConfirmation, setShowDeltaConfirmation] = useState(false);
   const [isUpdatingInventory, setIsUpdatingInventory] = useState(false);
   
@@ -719,6 +725,15 @@ const ProductsPage = () => {
       loadProducts(1, false);
     }
   }, [categoryId, loadGroups, loadAttributes, loadAllProductsForSidebar, products.length, hasMorePages, loadProducts]);
+
+  // Sync maxPercentage with user's TCG percentage preference
+  useEffect(() => {
+    if (selectedTCGPercentage !== null && selectedTCGPercentage !== undefined && !isNaN(selectedTCGPercentage)) {
+      setMaxPercentage(selectedTCGPercentage);
+    } else {
+      setMaxPercentage(100);
+    }
+  }, [selectedTCGPercentage]);
 
   useEffect(() => {
     if (categoryId && categoryId !== lastCategoryIdRef.current) {

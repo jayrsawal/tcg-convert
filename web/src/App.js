@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { CurrencyProvider } from './contexts/CurrencyContext';
+import { TCGPercentageProvider } from './contexts/TCGPercentageContext';
 import LandingPage from './components/LandingPage';
 import ProductsPage from './components/ProductsPage';
 import DeckBuilderPage from './components/DeckBuilderPage';
@@ -16,7 +17,8 @@ function App() {
   return (
     <AuthProvider>
       <CurrencyProvider>
-        <Router>
+        <TCGPercentageProvider>
+          <Router>
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
@@ -30,6 +32,7 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>
+        </TCGPercentageProvider>
       </CurrencyProvider>
     </AuthProvider>
   );

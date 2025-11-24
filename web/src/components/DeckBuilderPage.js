@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
+import { useTCGPercentage } from '../contexts/TCGPercentageContext';
 import { getFavorites, toggleFavorite } from '../lib/favorites';
 import { getUserInventory } from '../lib/inventory';
 import { fetchDeckList, updateDeckListName, updateDeckListItems, deleteDeckListItems, fetchCategoryRules } from '../lib/api';
@@ -27,6 +28,7 @@ const DeckBuilderPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { selectedCurrency, setSelectedCurrency, currencyRates, loadingRates } = useCurrency();
+  const { selectedTCGPercentage } = useTCGPercentage();
   const [deckList, setDeckList] = useState(null);
   const [deckItems, setDeckItems] = useState({}); // { product_id: quantity } - current deck items from server
   const [stagedDeckItems, setStagedDeckItems] = useState({}); // { product_id: quantity } - staged changes
@@ -76,7 +78,11 @@ const DeckBuilderPage = () => {
   const [histogramsMinimized, setHistogramsMinimized] = useState(false);
   const [histogramsExpanded, setHistogramsExpanded] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [maxPercentage, setMaxPercentage] = useState(100);
+  // Initialize maxPercentage with user's TCG percentage preference, or default to 100
+  const [maxPercentage, setMaxPercentage] = useState(() => {
+    const value = selectedTCGPercentage;
+    return (value !== null && value !== undefined && !isNaN(value)) ? value : 100;
+  });
   const pendingNavigationRef = useRef(null);
   
   // History for undo functionality
@@ -105,6 +111,15 @@ const DeckBuilderPage = () => {
   });
   const isUpdatingDeckProductsRef = useRef(false);
   const scrollPositionRef = useRef(0);
+
+  // Sync maxPercentage with user's TCG percentage preference
+  useEffect(() => {
+    if (selectedTCGPercentage !== null && selectedTCGPercentage !== undefined && !isNaN(selectedTCGPercentage)) {
+      setMaxPercentage(selectedTCGPercentage);
+    } else {
+      setMaxPercentage(100);
+    }
+  }, [selectedTCGPercentage]);
 
   useEffect(() => {
     // Load deck list regardless of authentication status (for public viewing)

@@ -1256,26 +1256,26 @@ export const fetchUserProfile = async (userId) => {
  */
 export const updateUserCurrency = async (userId, currency) => {
   try {
-    const url = API_BASE_URL 
+    const url = API_BASE_URL
       ? `${API_BASE_URL}/profiles/?user_id=${userId}`
       : `/profiles/?user_id=${userId}`;
-    
+
     const headers = await getAuthHeaders();
-    
+
     // Get current profile first to preserve other fields
     const getResponse = await fetch(url, { headers });
     if (!getResponse.ok && getResponse.status !== 404) {
       throw new Error(`Failed to fetch profile: ${getResponse.status} ${getResponse.statusText}`);
     }
-    
+
     const currentProfile = getResponse.status === 404 ? {} : await getResponse.json();
-    
+
     // Update currency field
     const requestBody = {
       ...currentProfile,
       currency: currency.toUpperCase()
     };
-    
+
     const postResponse = await fetch(url, {
       method: 'POST',
       headers,
@@ -1291,6 +1291,53 @@ export const updateUserCurrency = async (userId, currency) => {
     return await postResponse.json();
   } catch (error) {
     console.error('Error updating user currency:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update user profile TCG percentage
+ * @param {string} userId - User ID (UUID)
+ * @param {number} tcgPercentage - TCG percentage value (0-100)
+ * @returns {Promise<Object>} Updated profile object
+ */
+export const updateUserTcgPercentage = async (userId, tcgPercentage) => {
+  try {
+    const url = API_BASE_URL
+      ? `${API_BASE_URL}/profiles/?user_id=${userId}`
+      : `/profiles/?user_id=${userId}`;
+
+    const headers = await getAuthHeaders();
+
+    // Get current profile first to preserve other fields
+    const getResponse = await fetch(url, { headers });
+    if (!getResponse.ok && getResponse.status !== 404) {
+      throw new Error(`Failed to fetch profile: ${getResponse.status} ${getResponse.statusText}`);
+    }
+
+    const currentProfile = getResponse.status === 404 ? {} : await getResponse.json();
+
+    // Update tcg_percentage field
+    const requestBody = {
+      ...currentProfile,
+      tcg_percentage: Math.max(0, Math.min(100, Number(tcgPercentage)))
+    };
+
+    const postResponse = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!postResponse.ok) {
+      const errorText = await postResponse.text();
+      console.error('API Error Response:', errorText);
+      throw new Error(`Failed to update TCG percentage: ${postResponse.status} ${postResponse.statusText}`);
+    }
+
+    return await postResponse.json();
+  } catch (error) {
+    console.error('Error updating user TCG percentage:', error);
     throw error;
   }
 };
