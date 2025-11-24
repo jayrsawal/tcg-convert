@@ -2,15 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
-import { fetchUserProfile, updateUserCurrency } from '../lib/api';
+import { useTCGPercentage } from '../contexts/TCGPercentageContext';
+import { fetchUserProfile, updateUserCurrency, updateUserTcgPercentage } from '../lib/api';
 import NavigationBar from './NavigationBar';
 import './ProfilePage.css';
 
 const ProfilePage = () => {
   const { user, loading: authLoading } = useAuth();
   const { selectedCurrency, setSelectedCurrency } = useCurrency();
+  const { selectedTCGPercentage, setSelectedTCGPercentage } = useTCGPercentage();
   const navigate = useNavigate();
   const [currency, setCurrency] = useState(selectedCurrency.toUpperCase());
+  const [tcgPercentage, setTcgPercentage] = useState(selectedTCGPercentage);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -44,6 +47,16 @@ const ProfilePage = () => {
           // Default to current selected currency
           setCurrency(selectedCurrency);
         }
+
+        if (profile && profile.tcg_percentage !== undefined) {
+          const profileTCGPercentage = parseInt(profile.tcg_percentage, 10);
+          setTcgPercentage(profileTCGPercentage);
+          // Sync with TCG percentage context
+          setSelectedTCGPercentage(profileTCGPercentage);
+        } else {
+          // Default to current selected TCG percentage
+          setTcgPercentage(selectedTCGPercentage);
+        }
       } catch (err) {
         console.error('Error loading profile:', err);
         setError('Failed to load profile. Using default currency.');
@@ -62,6 +75,13 @@ const ProfilePage = () => {
     setSuccess('');
   };
 
+  const handleTcgPercentageChange = (e) => {
+    const value = Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0));
+    setTcgPercentage(value);
+    setError('');
+    setSuccess('');
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -69,13 +89,30 @@ const ProfilePage = () => {
     setSuccess('');
 
     try {
-      await updateUserCurrency(user.id, currency);
-      // Update currency context
-      setSelectedCurrency(currency.toLowerCase());
-      setSuccess('Currency updated successfully!');
+      // Update both currency and TCG percentage
+      const currencyChanged = currency.toLowerCase() !== selectedCurrency;
+      const tcgPercentageChanged = tcgPercentage !== selectedTCGPercentage;
+
+      if (currencyChanged) {
+        await updateUserCurrency(user.id, currency);
+        // Update currency context
+        setSelectedCurrency(currency.toLowerCase());
+      }
+
+      if (tcgPercentageChanged) {
+        await updateUserTcgPercentage(user.id, tcgPercentage);
+        // Update TCG percentage context
+        setSelectedTCGPercentage(tcgPercentage);
+      }
+
+      if (currencyChanged || tcgPercentageChanged) {
+        setSuccess('Settings updated successfully!');
+      } else {
+        setSuccess('No changes to save.');
+      }
     } catch (err) {
-      console.error('Error updating currency:', err);
-      setError(err.message || 'Failed to update currency. Please try again.');
+      console.error('Error updating settings:', err);
+      setError(err.message || 'Failed to update settings. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -117,7 +154,7 @@ const ProfilePage = () => {
                 <p className="profile-section-description">
                   Select your preferred currency for displaying prices throughout the application.
                 </p>
-                
+
                 <div className="form-group">
                   <label htmlFor="currency" className="form-label">
                     Currency
@@ -133,6 +170,38 @@ const ProfilePage = () => {
                     <option value="cad">CAD - Canadian Dollar</option>
                     <option value="eur">EUR - Euro</option>
                   </select>
+                </div>
+              </div>
+
+              <div className="profile-section">
+                <h2 className="profile-section-title">TCG Preferences</h2>
+                <p className="profile-section-description">
+                  Set your default maximum percentage value for TCG histograms and market value distributions.
+                </p>
+
+                <div className="form-group">
+                  <label htmlFor="tcg-percentage" className="form-label">
+                    TCG %
+                    <span
+                      className="tooltip-icon"
+                      title="This value defines the maximum percentage for histogram displays (0-100%)."
+                    >
+                      ?
+                    </span>
+                  </label>
+                  <div className="form-input-group">
+                    <input
+                      type="number"
+                      id="tcg-percentage"
+                      className="form-input"
+                      value={tcgPercentage}
+                      onChange={handleTcgPercentageChange}
+                      disabled={saving}
+                      min="0"
+                      max="100"
+                    />
+                    <span className="form-input-suffix">&nbsp;%</span>
+                  </div>
                 </div>
               </div>
 

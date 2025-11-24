@@ -22,6 +22,7 @@ class ProfileUpdate(BaseModel):
     items: Optional[Dict[str, int]] = Field(None, description="Inventory items (product_id string -> quantity integer)")
     favorites: Optional[Dict[str, int]] = Field(None, description="Favorites (product_id string -> quantity integer, typically 1)")
     total_count: Optional[int] = Field(None, description="Total inventory count (auto-calculated, but can be set manually)")
+    tcg_percentage: Optional[float] = Field(None, description="TCG percentage value (e.g., 85.5 for 85.5%)")
 
 
 @router.get("")
@@ -32,7 +33,7 @@ async def get_profile(
 ):
     """
     Get a user's profile. Public read access - no authentication required.
-    Returns profile data including username, avatar_url, currency, items (inventory), favorites, and timestamps.
+    Returns profile data including username, avatar_url, currency, items (inventory), favorites, tcg_percentage, and timestamps.
     Note: full_name is excluded from public responses for privacy.
     """
     try:
@@ -44,7 +45,7 @@ async def get_profile(
         
         response = (
             db.table("profiles")
-            .select("id,username,avatar_url,currency,items,favorites,total_count,created_at,updated_at")
+            .select("id,username,avatar_url,currency,items,favorites,total_count,tcg_percentage,created_at,updated_at")
             .eq("id", user_id)
             .execute()
         )
@@ -68,7 +69,7 @@ async def update_profile(
 ):
     """
     Update the current user's profile. Requires authentication - users can only update their own profile.
-    Updates any provided fields (username, full_name, avatar_url, currency, items, favorites, total_count).
+    Updates any provided fields (username, full_name, avatar_url, currency, items, favorites, total_count, tcg_percentage).
     Note: Database triggers will automatically update updated_at and calculate total_count from items.
     """
     try:
@@ -113,6 +114,8 @@ async def update_profile(
             update_payload["favorites"] = normalized_favorites
         if profile_update.total_count is not None:
             update_payload["total_count"] = profile_update.total_count
+        if profile_update.tcg_percentage is not None:
+            update_payload["tcg_percentage"] = profile_update.tcg_percentage
         
         if not update_payload:
             raise HTTPException(status_code=400, detail="No fields provided to update")
