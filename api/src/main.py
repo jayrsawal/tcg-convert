@@ -2,6 +2,7 @@
 FastAPI application main module.
 """
 import logging
+import os
 import time
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from dotenv import load_dotenv
 from src.routers import (
     categories,
     groups,
@@ -23,7 +25,27 @@ from src.routers import (
     profiles,
 )
 
+# Load environment variables from .env file (if present)
+# Environment variables take precedence over .env file values
+load_dotenv(override=False)
+
 logger = logging.getLogger(__name__)
+
+# Parse CORS origins from environment variable
+# Supports comma-separated list: CORS_ORIGINS=http://localhost:3000,https://example.com
+# If not set, defaults to ["*"] (allow all) for development
+cors_origins_env = os.getenv("CORS_ORIGINS", "").strip()
+if cors_origins_env:
+    # Parse comma-separated origins and strip whitespace
+    cors_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+    logger.info(f"CORS configured with origins: {cors_origins}")
+else:
+    # Default to allow all origins (development mode)
+    cors_origins = ["*"]
+    logger.warning(
+        "CORS_ORIGINS not set - allowing all origins (*). "
+        "For production, set CORS_ORIGINS in environment variables or .env file"
+    )
 
 app = FastAPI(
     title="TCGHermit API",
@@ -35,7 +57,7 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

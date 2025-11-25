@@ -24,6 +24,7 @@ SUPABASE_KEY=your_supabase_service_role_key
 PORT=8000
 HOST=0.0.0.0
 RELOAD=true
+CORS_ORIGINS=http://localhost:3000,https://yourdomain.com
 ```
 
 **Option B: Using environment variables (recommended for production)**
@@ -36,6 +37,7 @@ export SUPABASE_KEY=your_supabase_service_role_key
 export PORT=8000
 export HOST=0.0.0.0
 export RELOAD=true
+export CORS_ORIGINS=http://localhost:3000,https://yourdomain.com
 ```
 
 You can find these values in your Supabase project settings under API.
@@ -54,6 +56,11 @@ You can find these values in your Supabase project settings under API.
 - `PORT` (optional, default: 8000) - Port number for the API server
 - `HOST` (optional, default: 0.0.0.0) - Host address to bind to
 - `RELOAD` (optional, default: true) - Enable auto-reload on code changes
+- `CORS_ORIGINS` (optional, default: `*` - allow all) - Comma-separated list of allowed CORS origins
+  - **Production:** Set this to your frontend domain(s), e.g., `https://yourdomain.com,https://www.yourdomain.com`
+  - **Development:** Can be omitted (defaults to `*` to allow all origins) or set to `http://localhost:3000,http://localhost:5173`
+  - **Multiple origins:** Separate with commas: `https://app.example.com,https://admin.example.com`
+  - **Warning:** If not set in production, the API will allow all origins (`*`), which is insecure
 
 **Note:** JWT token validation is handled automatically by Supabase's auth client using your `SUPABASE_KEY`. No additional JWT secret configuration is required.
 
