@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fetchDeckLists, fetchAllDeckLists, createDeckList, updateDeckListName, deleteDeckList, fetchDeckList, fetchProductsBulk, extractExtendedDataFromProduct, fetchCurrentPricesBulk, fetchCategoryRules } from '../lib/api';
+import { RiFileCopyFill } from "react-icons/ri";
+import { fetchDeckLists, fetchAllDeckLists, createDeckList, updateDeckListName, deleteDeckList, fetchDeckList, fetchProductsBulk, extractExtendedDataFromProduct, fetchCurrentPricesBulk, fetchCategoryRules, updateDeckListItems } from '../lib/api';
 import ExportDeckModal from './ExportDeckModal';
 import NotificationModal from './NotificationModal';
 import ConfirmationModal from './ConfirmationModal';
+import DeckNamePromptModal from './DeckNamePromptModal';
 import './DeckListsPage.css';
 
 const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true, maxDecks = null, sortBy = null, fetchAllUsers = false, addDeckRedirect = null, skipPricing = false, showUsername = false }) => {
@@ -21,6 +23,9 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
   const [deckMetadata, setDeckMetadata] = useState({});
   const [notification, setNotification] = useState({ isOpen: false, title: '', message: '', type: 'info' });
   const [confirmation, setConfirmation] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [deckToDuplicate, setDeckToDuplicate] = useState(null);
+  const [loadingDuplicate, setLoadingDuplicate] = useState(false);
   
   // Guard to prevent duplicate API calls
   const loadingDecksRef = useRef(false);
@@ -447,6 +452,73 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
     }
   };
 
+  const handleDuplicateDeck = async (deck) => {
+    if (!user || !categoryId) return;
+    
+    setDeckToDuplicate(deck);
+    setShowDuplicateModal(true);
+  };
+
+  const handleConfirmDuplicate = async (newDeckName) => {
+    if (!user || !categoryId || !deckToDuplicate) return;
+    
+    setLoadingDuplicate(true);
+    
+    try {
+      const deckId = deckToDuplicate.deck_list_id || deckToDuplicate.id;
+      
+      // Fetch the full deck data to get all items
+      const fullDeck = await fetchDeckList(deckId, user.id);
+      if (!fullDeck) {
+        setNotification({
+          isOpen: true,
+          title: 'Duplicate Failed',
+          message: 'Failed to load deck data',
+          type: 'error'
+        });
+        setShowDuplicateModal(false);
+        setDeckToDuplicate(null);
+        return;
+      }
+
+      // Create new deck with the same items
+      const newDeck = await createDeckList(user.id, categoryId, newDeckName, fullDeck.items || {});
+      
+      // Update the new deck with all items from the original deck
+      if (fullDeck.items && Object.keys(fullDeck.items).length > 0) {
+        const newDeckId = newDeck.deck_list_id || newDeck.id;
+        await updateDeckListItems(newDeckId, user.id, fullDeck.items);
+      }
+
+      // Force a fresh reload by resetting the loading refs
+      loadingDecksRef.current = false;
+      lastLoadParamsRef.current = null;
+      
+      // Reload deck lists to show the new deck
+      await loadDeckLists(categoryId);
+      
+      setNotification({
+        isOpen: true,
+        title: 'Deck Duplicated',
+        message: `Deck "${newDeckName}" has been created successfully.`,
+        type: 'success'
+      });
+      
+      setShowDuplicateModal(false);
+      setDeckToDuplicate(null);
+    } catch (err) {
+      console.error('Error duplicating deck:', err);
+      setNotification({
+        isOpen: true,
+        title: 'Duplicate Failed',
+        message: 'Failed to duplicate deck. Please try again.',
+        type: 'error'
+      });
+    } finally {
+      setLoadingDuplicate(false);
+    }
+  };
+
   // Allow rendering if fetching all users' decks, otherwise require user
   if (!fetchAllUsers && !user) {
     return null;
@@ -706,6 +778,18 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
                         {user && (deck.user_id === user.id || deck.userId === user.id) && (
                           <>
                             <button
+                              className="duplicate-button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDuplicateDeck(deck);
+                              }}
+                              title="Duplicate deck"
+                              disabled={loadingDuplicate}
+                            >
+                            <RiFileCopyFill />
+
+                            </button>
+                            <button
                               className="export-button"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -841,6 +925,18 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
         onConfirm={confirmation.onConfirm}
         title={confirmation.title}
         message={confirmation.message}
+      />
+
+      <DeckNamePromptModal
+        isOpen={showDuplicateModal}
+        onClose={() => {
+          setShowDuplicateModal(false);
+          setDeckToDuplicate(null);
+        }}
+        onConfirm={handleConfirmDuplicate}
+        title="Duplicate Deck"
+        message="Enter a name for the duplicated deck:"
+        defaultValue={deckToDuplicate ? `Copy of ${deckToDuplicate.name || 'Untitled Deck'}` : ''}
       />
     </>
   );
