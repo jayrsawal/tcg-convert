@@ -14,7 +14,8 @@ export const AuthProvider = ({ children }) => {
         setUser({
           id: session.user.id,
           email: session.user.email,
-          name: session.user.user_metadata?.name || session.user.email
+          name: session.user.user_metadata?.name || session.user.email,
+          emailConfirmed: !!session.user.email_confirmed_at || !!session.user.confirmed_at
         });
       }
       setLoading(false);
@@ -28,7 +29,8 @@ export const AuthProvider = ({ children }) => {
         setUser({
           id: session.user.id,
           email: session.user.email,
-          name: session.user.user_metadata?.name || session.user.email
+          name: session.user.user_metadata?.name || session.user.email,
+          emailConfirmed: !!session.user.email_confirmed_at || !!session.user.confirmed_at
         });
       } else {
         setUser(null);
@@ -47,16 +49,27 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (error) {
+        // Check if error is related to email confirmation
+        if (error.message && (error.message.includes('email') || error.message.includes('confirm'))) {
+          throw new Error('Please confirm your email address before signing in.');
+        }
         throw error;
       }
 
       if (data?.user) {
+        const emailConfirmed = !!data.user.email_confirmed_at || !!data.user.confirmed_at;
         const userData = {
           id: data.user.id,
           email: data.user.email,
-          name: data.user.user_metadata?.name || data.user.email
+          name: data.user.user_metadata?.name || data.user.email,
+          emailConfirmed: emailConfirmed
         };
-        setUser(userData);
+        
+        // Only set user if email is confirmed
+        if (emailConfirmed) {
+          setUser(userData);
+        }
+        
         return userData;
       }
 
@@ -69,6 +82,11 @@ export const AuthProvider = ({ children }) => {
 
   const signUp = async (email, password, name) => {
     try {
+      // Get the base URL for redirect (use window.location for client-side)
+      const redirectTo = typeof window !== 'undefined' 
+        ? `${window.location.origin}/login`
+        : '/login';
+      
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -76,6 +94,7 @@ export const AuthProvider = ({ children }) => {
           data: {
             name: name || email,
           },
+          emailRedirectTo: redirectTo,
         },
       });
 
@@ -84,13 +103,14 @@ export const AuthProvider = ({ children }) => {
       }
 
       if (data?.user) {
-        const userData = {
+        // Don't set user as logged in since email needs to be confirmed
+        // User will need to sign in after confirming email
+        return {
           id: data.user.id,
           email: data.user.email,
-          name: data.user.user_metadata?.name || name || email
+          name: data.user.user_metadata?.name || name || email,
+          emailConfirmed: false
         };
-        setUser(userData);
-        return userData;
       }
 
       throw new Error('Registration failed');
@@ -110,12 +130,53 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const resetPassword = async (email) => {
+    try {
+      // Get the base URL for redirect (use window.location for client-side)
+      const redirectTo = typeof window !== 'undefined' 
+        ? `${window.location.origin}/reset-password`
+        : '/reset-password';
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectTo,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Reset password error:', error);
+      throw error;
+    }
+  };
+
+  const updatePassword = async (newPassword) => {
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Update password error:', error);
+      throw error;
+    }
+  };
+
   const value = {
     user,
     loading,
     signIn,
     signUp,
-    signOut
+    signOut,
+    resetPassword,
+    updatePassword
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

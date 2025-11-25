@@ -10,6 +10,7 @@ import DeckListsPage from './components/DeckListsPage';
 import ProductCardPage from './components/ProductCardPage';
 import LoginPage from './components/LoginPage';
 import SignupPage from './components/SignupPage';
+import ForgotPasswordPage from './components/ForgotPasswordPage';
 import ProfilePage from './components/ProfilePage';
 import './App.css';
 
@@ -23,6 +24,8 @@ function App() {
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ForgotPasswordPage />} />
             <Route path="/inventory" element={<ProductsPage />} />
             <Route path="/categories/:categoryId/products" element={<Navigate to="/inventory" replace />} />
             <Route path="/deck-builder/:deckListId" element={<DeckBuilderPage />} />
