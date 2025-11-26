@@ -9,13 +9,15 @@ from db_config import (
     get_db_schema,
     is_mock_mode,
     should_scrape_tcgcsv,
-    should_scrape_cardtrader
+    should_scrape_cardtrader,
+    should_scrape_vendor_prices,
 )
 from categories import scrape_and_upsert_all_categories
 from groups import scrape_and_upsert_all_groups
 from products import scrape_and_upsert_all_products
 from prices import scrape_and_upsert_all_prices
 from cardtrader import scrape_and_upsert_all_cardtrader
+from vendor_prices import scrape_vendor_prices
 from scraper_runs import ScraperRunTracker
 
 
@@ -46,14 +48,16 @@ def main():
         # Check which scrapers to run
         scrape_tcgcsv = should_scrape_tcgcsv()
         scrape_cardtrader = should_scrape_cardtrader()
+        scrape_vendor = should_scrape_vendor_prices()
         
-        if not scrape_tcgcsv and not scrape_cardtrader:
-            print("\n⚠️  Both SCRAPE_TCGCSV and SCRAPE_CARDTRADER are disabled. Nothing to scrape.")
+        if not any([scrape_tcgcsv, scrape_cardtrader, scrape_vendor]):
+            print("\n⚠️  All scrapers are disabled. Nothing to scrape.")
             return
         
         print(f"\n📋 Scraper Configuration:")
         print(f"   TCGCSV: {'✅ Enabled' if scrape_tcgcsv else '❌ Disabled'}")
         print(f"   CardTrader: {'✅ Enabled' if scrape_cardtrader else '❌ Disabled'}")
+        print(f"   Vendor Prices: {'✅ Enabled' if scrape_vendor else '❌ Disabled'}")
         
         # TCGCSV Scraping
         if scrape_tcgcsv:
@@ -76,6 +80,7 @@ def main():
             # Feature 5 & 5a: Scrape and upsert prices
             print("\n=== Feature 5 & 5a: Scraping Prices ===")
             scrape_and_upsert_all_prices(client)
+            tracker.mark_scraper_executed("tcgcsv")
         else:
             print("\n⏭️  Skipping TCGCSV scraping (SCRAPE_TCGCSV=false)")
         
@@ -85,8 +90,19 @@ def main():
             print("CARDTRADER API SCRAPING")
             print("="*70)
             scrape_and_upsert_all_cardtrader(client)
+            tracker.mark_scraper_executed("cardtrader")
         else:
             print("\n⏭️  Skipping CardTrader scraping (SCRAPE_CARDTRADER=false)")
+
+        # Vendor scraping
+        if scrape_vendor:
+            print("\n" + "="*70)
+            print("VENDOR PRICE SCRAPING")
+            print("="*70)
+            scrape_vendor_prices(client)
+            tracker.mark_scraper_executed("vendor_prices")
+        else:
+            print("\n⏭️  Skipping vendor scraping (SCRAPE_VENDOR_PRICES=false)")
         
         print("\n✅ Scraping completed successfully!")
         

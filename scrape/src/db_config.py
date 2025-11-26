@@ -202,3 +202,19 @@ def should_scrape_cardtrader() -> bool:
     scrape_str = os.getenv("SCRAPE_CARDTRADER", "true").lower()
     return scrape_str in ("true", "1", "yes", "on")
 
+
+def should_scrape_vendor_prices() -> bool:
+    """
+    Check if vendor price scraping should be enabled.
+    
+    Reads from:
+    - Environment variable SCRAPE_VENDOR_PRICES (takes precedence)
+    - .env file SCRAPE_VENDOR_PRICES entry
+    - Defaults to False if not set
+    
+    Returns:
+        True if vendor price scraping should run, False otherwise.
+    """
+    scrape_str = os.getenv("SCRAPE_VENDOR_PRICES", "false").lower()
+    return scrape_str in ("true", "1", "yes", "on")
+

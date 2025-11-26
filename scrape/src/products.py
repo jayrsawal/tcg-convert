@@ -10,6 +10,23 @@ from typing import Dict, Any, List, Optional
 from supabase import Client
 from db_config import get_db_schema, get_category_whitelist, is_mock_mode
 from categories import filter_categories_by_whitelist
+
+
+def _extract_rarity_from_extended(ext_data: Optional[List[Dict[str, Any]]]) -> Optional[str]:
+    """Return the first rarity value found in extended data."""
+    if not ext_data:
+        return None
+    for entry in ext_data:
+        if not isinstance(entry, dict):
+            continue
+        name = (entry.get("name") or "").strip().lower()
+        display = (entry.get("displayName") or "").strip().lower()
+        if name == "rarity" or display == "rarity":
+            value = entry.get("value")
+            if isinstance(value, str):
+                value = value.strip()
+            return value or None
+    return None
 from mock_utils import dump_data_examples
 
 
@@ -68,6 +85,7 @@ def parse_products_json(json_data: Dict[str, Any], category_id: int, group_id: i
         # Extract extended data before creating product dict
         ext_data = item.get("extendedData", [])
         extended_data_raw = json.dumps(ext_data) if ext_data else None
+        rarity_value = _extract_rarity_from_extended(ext_data)
         
         def get_int(key: str) -> Optional[int]:
             value = item.get(key)
@@ -90,7 +108,8 @@ def parse_products_json(json_data: Dict[str, Any], category_id: int, group_id: i
             "fixed_amount": get_int("fixedAmount"),
             "modified_on": modified_on.isoformat() if modified_on else None,
             "raw": json.dumps(item),
-            "extended_data_raw": extended_data_raw
+            "extended_data_raw": extended_data_raw,
+            "rarity": rarity_value
         }
         products.append(product)
         

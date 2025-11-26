@@ -22,6 +22,11 @@ class ScraperRunTracker:
             "products_scraped": 0,
             "prices_scraped": 0,
         }
+        self.scrapers_executed = {
+            "tcgcsv": False,
+            "cardtrader": False,
+            "vendor_prices": False,
+        }
     
     def start_run(self) -> bool:
         """
@@ -44,6 +49,9 @@ class ScraperRunTracker:
                 "groups_scraped": 0,
                 "products_scraped": 0,
                 "prices_scraped": 0,
+                "ran_tcgcsv": False,
+                "ran_cardtrader": False,
+                "ran_vendor_prices": False,
             }
             
             result = table.insert(run_data).execute()
@@ -67,6 +75,12 @@ class ScraperRunTracker:
     def update_stats(self, **kwargs):
         """Update statistics for the current run."""
         self.stats.update(kwargs)
+
+    def mark_scraper_executed(self, scraper_name: str):
+        """Record that a specific scraper module actually ran."""
+        if scraper_name not in self.scrapers_executed:
+            return
+        self.scrapers_executed[scraper_name] = True
     
     def complete_run(self, success: bool = True, error_message: Optional[str] = None, notes: Optional[str] = None):
         """
@@ -95,6 +109,9 @@ class ScraperRunTracker:
                 "groups_scraped": self.stats.get("groups_scraped", 0),
                 "products_scraped": self.stats.get("products_scraped", 0),
                 "prices_scraped": self.stats.get("prices_scraped", 0),
+                "ran_tcgcsv": self.scrapers_executed.get("tcgcsv", False),
+                "ran_cardtrader": self.scrapers_executed.get("cardtrader", False),
+                "ran_vendor_prices": self.scrapers_executed.get("vendor_prices", False),
             }
             
             if error_message:

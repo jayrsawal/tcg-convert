@@ -16,6 +16,7 @@ A Python scraper for extracting trading card game data from [tcgcsv.com](https:/
 - **Product Cards**: Generate HTML product card pages with special handling for card text attributes
 - **Mock Mode**: Test the scraper without writing to the database - dumps example data instead
 - **CardTrader API Integration**: Scrapes games, categories, expansions, and blueprints from CardTrader API v2
+- **Vendor Price Scraping**: Scrapes KanzenGames Gundam singles (or other vendors) with hourly history retention
 
 ## Requirements
 
@@ -66,9 +67,10 @@ DB_SCHEMA=public
 # CATEGORY_WHITELIST=Pokemon,Magic
 CATEGORY_WHITELIST=
 
-# Scraper Selection (optional, both default to true)
-# SCRAPE_TCGCSV=true          # Enable/disable TCGCSV scraping
-# SCRAPE_CARDTRADER=true      # Enable/disable CardTrader scraping
+# Scraper Selection
+# SCRAPE_TCGCSV=true          # Enable/disable TCGCSV scraping (default true)
+# SCRAPE_CARDTRADER=true      # Enable/disable CardTrader scraping (default true)
+# SCRAPE_VENDOR_PRICES=false  # Enable vendor scraping (default false)
 
 # CardTrader API Configuration (optional, required if SCRAPE_CARDTRADER=true)
 # CARDTRADER_KEY=your-jwt-bearer-token
@@ -92,6 +94,8 @@ CATEGORY_WHITELIST=
   - Set to `false` to skip TCGCSV scraping entirely
 - **SCRAPE_CARDTRADER**: Enable/disable CardTrader scraping (default: `true`)
   - Set to `false` to skip CardTrader scraping entirely
+- **SCRAPE_VENDOR_PRICES**: Enable/disable vendor scraping (default: `false`)
+  - Set to `true` to scrape Kanzen Games (and future vendor integrations)
 - **CARDTRADER_KEY**: JWT bearer token for CardTrader API authentication (required if SCRAPE_CARDTRADER=true)
 - **CARDTRADER_GAME_WHITELIST**: Optional comma-separated list of game IDs to limit CardTrader expansion/blueprint scraping
 
@@ -131,6 +135,7 @@ The scraper will:
 3. For each group, fetch and upsert all products and extended data
 4. For each group, fetch and upsert current and historical prices (group-level endpoint)
 5. Fetch and upsert CardTrader API data (games, categories, expansions, blueprints) if CARDTRADER_KEY is set
+6. Scrape vendor price data (e.g., Kanzen Games) when `SCRAPE_VENDOR_PRICES=true`
 
 ### Mock Mode (Testing Without Database Writes)
 
@@ -200,6 +205,7 @@ scrape/
    - Extended data is stored in `product_extended_data` table
    - Raw extended data JSON is stored in `products.extended_data_raw` column
 4. **Prices**: For each product, fetched from `/tcgplayer/{productId}/prices` → stored in `prices_current` and `prices_history` tables
+5. **Vendor Prices**: External vendor listings (e.g., Kanzen Games) scraped from HTML pages → stored in `vendor_prices` and `vendor_prices_history`
 
 ## API Endpoints
 
@@ -221,6 +227,9 @@ The scraper uses the following tcgcsv.com endpoints:
 - **prices_current**: Current pricing information
 - **prices_history**: Historical pricing with hourly granularity
 - **category_extended_data_keys**: Tracks distinct extended data keys per category
+- **cardtrader_games / categories / expansions / blueprints**: CardTrader API entities
+- **cardtrader_prices / cardtrader_prices_history**: Marketplace prices from CardTrader API
+- **vendor_prices / vendor_prices_history**: Vendor scraping snapshots and hourly history
 
 ### Key Features
 
