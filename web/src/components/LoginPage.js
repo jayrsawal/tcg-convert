@@ -1,26 +1,56 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import './LoginPage.css';
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const { signIn } = useAuth();
+  const location = useLocation();
+  const { signIn, signOut } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Show message from signup page if present
+  useEffect(() => {
+    if (location.state?.message) {
+      if (location.state.messageType === 'success') {
+        setInfo(location.state.message);
+      } else {
+        setError(location.state.message);
+      }
+      // Clear the state to prevent showing it again on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setInfo('');
     setLoading(true);
 
     try {
-      await signIn(email, password);
+      const userData = await signIn(email, password);
+      
+      // Check if email is confirmed
+      if (userData && !userData.emailConfirmed) {
+        setError('Please confirm your email address before signing in. Check your inbox for the confirmation link.');
+        // Sign out the user since email is not confirmed
+        await signOut();
+        return;
+      }
+      
       navigate('/');
     } catch (err) {
-      setError(err.message || 'Failed to sign in. Please check your credentials.');
+      // Check if error is related to email confirmation
+      if (err.message && (err.message.includes('email') && err.message.includes('confirm'))) {
+        setError('Please confirm your email address before signing in. Check your inbox for the confirmation link.');
+      } else {
+        setError(err.message || 'Failed to sign in. Please check your credentials.');
+      }
     } finally {
       setLoading(false);
     }
@@ -38,6 +68,12 @@ const LoginPage = () => {
         <div className="login-container">
           <h2 className="login-title">Sign In</h2>
           
+          {info && (
+            <div className="login-info">
+              <p>{info}</p>
+            </div>
+          )}
+
           {error && (
             <div className="login-error">
               <p>{error}</p>
@@ -58,7 +94,12 @@ const LoginPage = () => {
             </div>
 
             <div className="form-group">
-              <label htmlFor="password">Password</label>
+              <div className="password-label-row">
+                <label htmlFor="password">Password</label>
+                <Link to="/forgot-password" className="forgot-password-link">
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 type="password"
                 id="password"

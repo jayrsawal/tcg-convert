@@ -31,7 +31,13 @@ const SignupPage = () => {
 
     try {
       await signUp(email, password, name);
-      navigate('/');
+      // Redirect to login page with a message about email confirmation
+      navigate('/login', { 
+        state: { 
+          message: 'Account created successfully! Please check your email to confirm your account before signing in.',
+          messageType: 'success'
+        } 
+      });
     } catch (err) {
       setError(err.message || 'Failed to create account. Please try again.');
     } finally {
