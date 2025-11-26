@@ -182,6 +182,10 @@ def _fetch_kanzen_products(currency_rates: Dict[str, float]) -> List[Dict[str, A
             price_min = price_min_el.get_text(strip=True) if price_min_el else None
             price_max = price_max_el.get_text(strip=True) if price_max_el else None
 
+            price_single_value = _parse_price_value(price_single)
+            price_min_value = _parse_price_value(price_min)
+            price_max_value = _parse_price_value(price_max)
+
             quickshop_rel = item.get("data-product-quickshop-url")
             quickshop_url = (
                 quickshop_rel
@@ -189,19 +193,15 @@ def _fetch_kanzen_products(currency_rates: Dict[str, float]) -> List[Dict[str, A
                 else (urljoin(KANZEN_BASE_URL, quickshop_rel) if quickshop_rel else None)
             )
 
-            price_single_value = _parse_price_value(price_single)
-            price_min_value = _parse_price_value(price_min)
-            price_max_value = _parse_price_value(price_max)
-
             record = {
                 "vendor": vendor_domain,
                 "title": title,
                 "price_single_text": price_single,
-                "price_single_value": _convert_to_usd(price_single_value, "cad", currency_rates) or price_single_value,
+                "market_price": _convert_to_usd(price_single_value, "cad", currency_rates) or price_single_value,
                 "price_min_text": price_min,
-                "price_min_value": _convert_to_usd(price_min_value, "cad", currency_rates) or price_min_value,
+                "low_price": _convert_to_usd(price_min_value, "cad", currency_rates) or price_min_value,
                 "price_max_text": price_max,
-                "price_max_value": _convert_to_usd(price_max_value, "cad", currency_rates) or price_max_value,
+                "high_price": _convert_to_usd(price_max_value, "cad", currency_rates) or price_max_value,
                 "quickshop_url": quickshop_url,
                 "source_url": next_url,
                 "fetched_at": fetched_at,
@@ -290,11 +290,11 @@ def _fetch_401games_products(currency_rates: Dict[str, float]) -> List[Dict[str,
             "vendor": vendor_domain,
             "title": title,
             "price_single_text": price_single,
-            "price_single_value": _convert_to_usd(price_single_value, "cad", currency_rates) or price_single_value,
+            "market_price": _convert_to_usd(price_single_value, "cad", currency_rates) or price_single_value,
             "price_min_text": price_min,
-            "price_min_value": _convert_to_usd(price_min_value, "cad", currency_rates) or price_min_value,
+            "low_price": _convert_to_usd(price_min_value, "cad", currency_rates) or price_min_value,
             "price_max_text": price_max,
-            "price_max_value": _convert_to_usd(price_max_value, "cad", currency_rates) or price_max_value,
+            "high_price": _convert_to_usd(price_max_value, "cad", currency_rates) or price_max_value,
             "quickshop_url": quickshop_url,
             "source_url": FASTSIMON_API_URL,
             "fetched_at": fetched_at,
