@@ -15,6 +15,7 @@ A Python scraper for extracting trading card game data from [tcgcsv.com](https:/
 - **Extended Data Tracking**: Track distinct extended data keys per category
 - **Product Cards**: Generate HTML product card pages with special handling for card text attributes
 - **Mock Mode**: Test the scraper without writing to the database - dumps example data instead
+- **CardTrader API Integration**: Scrapes games, categories, expansions, and blueprints from CardTrader API v2
 
 ## Requirements
 
@@ -64,6 +65,14 @@ DB_SCHEMA=public
 # CATEGORY_WHITELIST=1,2,3
 # CATEGORY_WHITELIST=Pokemon,Magic
 CATEGORY_WHITELIST=
+
+# Scraper Selection (optional, both default to true)
+# SCRAPE_TCGCSV=true          # Enable/disable TCGCSV scraping
+# SCRAPE_CARDTRADER=true      # Enable/disable CardTrader scraping
+
+# CardTrader API Configuration (optional, required if SCRAPE_CARDTRADER=true)
+# CARDTRADER_KEY=your-jwt-bearer-token
+# CARDTRADER_GAME_WHITELIST=1,2,3  # Optional, comma-separated game IDs
 ```
 
 ### Environment Variables
@@ -79,6 +88,12 @@ CATEGORY_WHITELIST=
   - When enabled, all database write operations are mocked
   - Data that would be inserted/updated is dumped to console with examples
   - Useful for testing the scraper without modifying the database
+- **SCRAPE_TCGCSV**: Enable/disable TCGCSV scraping (default: `true`)
+  - Set to `false` to skip TCGCSV scraping entirely
+- **SCRAPE_CARDTRADER**: Enable/disable CardTrader scraping (default: `true`)
+  - Set to `false` to skip CardTrader scraping entirely
+- **CARDTRADER_KEY**: JWT bearer token for CardTrader API authentication (required if SCRAPE_CARDTRADER=true)
+- **CARDTRADER_GAME_WHITELIST**: Optional comma-separated list of game IDs to limit CardTrader expansion/blueprint scraping
 
 ## Database Setup
 
@@ -114,7 +129,8 @@ The scraper will:
 1. Fetch and upsert all categories (or filtered categories if whitelist is set)
 2. For each category, fetch and upsert all groups
 3. For each group, fetch and upsert all products and extended data
-4. For each product, fetch and upsert current and historical prices
+4. For each group, fetch and upsert current and historical prices (group-level endpoint)
+5. Fetch and upsert CardTrader API data (games, categories, expansions, blueprints) if CARDTRADER_KEY is set
 
 ### Mock Mode (Testing Without Database Writes)
 

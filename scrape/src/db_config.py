@@ -122,3 +122,83 @@ def is_mock_mode() -> bool:
     mock_str = os.getenv("MOCK_DB_OPERATIONS", "false").lower()
     return mock_str in ("true", "1", "yes", "on")
 
+
+def get_cardtrader_key() -> Optional[str]:
+    """
+    Get the CardTrader API JWT bearer token.
+    
+    Reads from:
+    - Environment variable CARDTRADER_KEY (takes precedence)
+    - .env file CARDTRADER_KEY entry
+    
+    Returns:
+        JWT token string or None if not set
+    """
+    return os.getenv("CARDTRADER_KEY")
+
+
+def get_cardtrader_game_whitelist() -> Optional[List[int]]:
+    """
+    Parse and return the CardTrader game ID whitelist from environment variables or .env file.
+    
+    Reads from:
+    - Environment variable CARDTRADER_GAME_WHITELIST (takes precedence)
+    - .env file CARDTRADER_GAME_WHITELIST entry
+    
+    The CARDTRADER_GAME_WHITELIST should contain comma-separated game IDs.
+    
+    Examples:
+        CARDTRADER_GAME_WHITELIST=1,2,3
+        CARDTRADER_GAME_WHITELIST=5
+    
+    Returns:
+        List of whitelisted game IDs as integers, or None if not set.
+    """
+    whitelist_str = os.getenv("CARDTRADER_GAME_WHITELIST")
+    if not whitelist_str:
+        return None
+    
+    # Split by comma and convert to integers
+    items = []
+    for item in whitelist_str.split(","):
+        item = item.strip()
+        if item:
+            try:
+                items.append(int(item))
+            except ValueError:
+                continue
+    
+    return items if items else None
+
+
+def should_scrape_tcgcsv() -> bool:
+    """
+    Check if TCGCSV scraping should be enabled.
+    
+    Reads from:
+    - Environment variable SCRAPE_TCGCSV (takes precedence)
+    - .env file SCRAPE_TCGCSV entry
+    - Defaults to True if not set
+    
+    Returns:
+        True if TCGCSV scraping should run, False otherwise.
+    """
+    scrape_str = os.getenv("SCRAPE_TCGCSV", "true").lower()
+    return scrape_str in ("true", "1", "yes", "on")
+
+
+def should_scrape_cardtrader() -> bool:
+    """
+    Check if CardTrader scraping should be enabled.
+    
+    Reads from:
+    - Environment variable SCRAPE_CARDTRADER (takes precedence)
+    - .env file SCRAPE_CARDTRADER entry
+    - Defaults to True if not set
+    
+    Returns:
+        True if CardTrader scraping should run, False otherwise.
+    """
+    scrape_str = os.getenv("SCRAPE_CARDTRADER", "true").lower()
+    return scrape_str in ("true", "1", "yes", "on")
+
