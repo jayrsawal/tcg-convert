@@ -8,8 +8,9 @@ import requests
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from supabase import Client
-from db_config import get_db_schema, get_category_whitelist
+from db_config import get_db_schema, get_category_whitelist, is_mock_mode
 from categories import filter_categories_by_whitelist
+from mock_utils import dump_data_examples
 
 
 def _normalize_timestamp(timestamp_str: Optional[str]) -> Optional[datetime]:
@@ -87,7 +88,7 @@ def parse_products_json(json_data: Dict[str, Any], category_id: int, group_id: i
             "url": get_string("url"),
             "number": get_string("number"),
             "fixed_amount": get_int("fixedAmount"),
-            "modified_on": modified_on,
+            "modified_on": modified_on.isoformat() if modified_on else None,
             "raw": json.dumps(item),
             "extended_data_raw": extended_data_raw
         }
@@ -112,12 +113,25 @@ def parse_products_json(json_data: Dict[str, Any], category_id: int, group_id: i
 
 def upsert_products(client: Client, products: List[Dict[str, Any]], extended_data: List[Dict[str, Any]]) -> None:
     """Upsert products and extended data into the database using bulk operations."""
+    if not products:
+        return
+    
+    # Check for mock mode
+    if is_mock_mode():
+        print("      [MOCK MODE] Products upsert - dumping examples:")
+        dump_data_examples("products", products, "UPSERT", max_examples=3)
+        
+        if extended_data:
+            print("      [MOCK MODE] Product extended data insert - dumping examples:")
+            dump_data_examples("product_extended_data", extended_data, "INSERT", max_examples=5)
+            print(f"      [MOCK] Would insert {len(extended_data)} extended data records")
+        
+        print(f"      [MOCK] Would upsert {len(products)} products")
+        return
+    
     schema = get_db_schema()
     products_table = client.schema(schema).from_("products") if schema != "public" else client.table("products")
     ext_data_table = client.schema(schema).from_("product_extended_data") if schema != "public" else client.table("product_extended_data")
-    
-    if not products:
-        return
     
     try:
         # Bulk fetch existing products
@@ -147,10 +161,20 @@ def upsert_products(client: Client, products: List[Dict[str, Any]], extended_dat
             to_upsert.append(product)
         
         if to_upsert:
-            products_table.upsert(to_upsert, on_conflict="product_id").execute()
-            print(f"      Upserted {len(to_upsert)} products (skipped {skipped} unchanged)")
+            print(f"      Attempting to upsert {len(to_upsert)} products...")
+            try:
+                result = products_table.upsert(to_upsert, on_conflict="product_id").execute()
+                print(f"      ✅ Successfully executed upsert for {len(to_upsert)} products (skipped {skipped} unchanged)")
+            except Exception as upsert_err:
+                print(f"      ❌ Error during upsert execution: {upsert_err}")
+                import traceback
+                traceback.print_exc()
+                raise  # Re-raise to trigger fallback
         else:
-            print(f"      All {len(products)} products up to date (skipped)")
+            if skipped > 0:
+                print(f"      All {len(products)} products up to date (skipped {skipped} unchanged)")
+            else:
+                print(f"      ⚠️  No products to upsert (total scraped: {len(products)})")
         
         # Handle extended data: delete old and insert new for updated products
         if to_upsert:
@@ -191,14 +215,27 @@ def upsert_category_extended_data_keys(client: Client, category_id: int, extende
     if not extended_data:
         return
     
-    schema = get_db_schema()
-    table = client.schema(schema).from_("category_extended_data_keys") if schema != "public" else client.table("category_extended_data_keys")
-    
     # Get unique keys
     unique_keys = set(ed.get("key") for ed in extended_data if ed.get("key"))
     
     if not unique_keys:
         return
+    
+    # Check for mock mode
+    if is_mock_mode():
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        records = [
+            {"category_id": category_id, "key": key, "last_seen": now.isoformat()}
+            for key in unique_keys
+        ]
+        print("      [MOCK MODE] Category extended data keys upsert - dumping examples:")
+        dump_data_examples("category_extended_data_keys", records, "UPSERT", max_examples=5)
+        print(f"      [MOCK] Would upsert {len(records)} category extended data keys for category {category_id}")
+        return
+    
+    schema = get_db_schema()
+    table = client.schema(schema).from_("category_extended_data_keys") if schema != "public" else client.table("category_extended_data_keys")
     
     try:
         # Fetch existing keys for this category
@@ -220,7 +257,7 @@ def upsert_category_extended_data_keys(client: Client, category_id: int, extende
             now = datetime.now(timezone.utc)
             for key in unique_keys:
                 table.upsert(
-                    {"category_id": category_id, "key": key, "last_seen": now},
+                    {"category_id": category_id, "key": key, "last_seen": now.isoformat()},
                     on_conflict="category_id,key"
                 ).execute()
                 

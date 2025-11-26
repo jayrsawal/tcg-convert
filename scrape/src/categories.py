@@ -8,7 +8,8 @@ import requests
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from supabase import Client
-from db_config import get_db_schema, get_category_whitelist
+from db_config import get_db_schema, get_category_whitelist, is_mock_mode
+from mock_utils import dump_data_examples, mock_table_operations
 
 
 def _normalize_timestamp(timestamp_str: Optional[str]) -> Optional[datetime]:
@@ -113,7 +114,7 @@ def parse_categories_json(json_data: Dict[str, Any]) -> List[Dict[str, Any]]:
             "is_scannable": get_bool("isScannable"),
             "popularity": get_int("popularity"),
             "fixed_amount": get_int("fixedAmount"),
-            "modified_on": modified_on,
+            "modified_on": modified_on.isoformat() if modified_on else None,
             "raw": json.dumps(item)
         }
         categories.append(category)
@@ -162,6 +163,13 @@ def upsert_categories(client: Client, categories: List[Dict[str, Any]]) -> None:
     if not categories:
         return
     
+    # Check for mock mode
+    if is_mock_mode():
+        print("  [MOCK MODE] Categories upsert - dumping examples:")
+        dump_data_examples("categories", categories, "UPSERT", max_examples=5)
+        print(f"  [MOCK] Would upsert {len(categories)} categories")
+        return
+    
     schema = get_db_schema()
     table = client.schema(schema).from_("categories") if schema != "public" else client.table("categories")
     
@@ -196,13 +204,26 @@ def upsert_categories(client: Client, categories: List[Dict[str, Any]]) -> None:
         
         if to_upsert:
             # Bulk upsert
-            table.upsert(to_upsert, on_conflict="category_id").execute()
-            print(f"  Upserted {len(to_upsert)} categories (skipped {skipped} unchanged)")
+            print(f"  Attempting to upsert {len(to_upsert)} categories...")
+            try:
+                result = table.upsert(to_upsert, on_conflict="category_id").execute()
+                print(f"  ✅ Successfully executed upsert for {len(to_upsert)} categories (skipped {skipped} unchanged)")
+                # Supabase upsert may not return data, so we just confirm execution
+            except Exception as upsert_err:
+                print(f"  ❌ Error during upsert execution: {upsert_err}")
+                import traceback
+                traceback.print_exc()
+                raise  # Re-raise to trigger fallback
         else:
-            print(f"  All {len(categories)} categories up to date (skipped)")
+            if skipped > 0:
+                print(f"  All {len(categories)} categories up to date (skipped {skipped} unchanged)")
+            else:
+                print(f"  ⚠️  No categories to upsert (total scraped: {len(categories)})")
             
     except Exception as e:
         print(f"  Error in bulk upsert, falling back to individual operations: {e}")
+        import traceback
+        traceback.print_exc()
         # Fallback to individual upserts
         for cat in categories:
             try:

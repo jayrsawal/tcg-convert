@@ -8,8 +8,9 @@ import requests
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from supabase import Client
-from db_config import get_db_schema, get_category_whitelist
+from db_config import get_db_schema, get_category_whitelist, is_mock_mode
 from categories import filter_categories_by_whitelist
+from mock_utils import dump_data_examples
 
 
 def _normalize_timestamp(timestamp_str: Optional[str]) -> Optional[datetime]:
@@ -75,8 +76,8 @@ def parse_groups_json(json_data: Dict[str, Any], category_id: int) -> List[Dict[
             "name": item.get("name", "").strip() or "",
             "abbreviation": get_string("abbreviation"),
             "is_supplemental": get_bool("isSupplemental"),
-            "published_on": published_on,
-            "modified_on": modified_on,
+            "published_on": published_on.isoformat() if published_on else None,
+            "modified_on": modified_on.isoformat() if modified_on else None,
             "raw": json.dumps(item)
         }
         groups.append(group)
@@ -87,6 +88,13 @@ def parse_groups_json(json_data: Dict[str, Any], category_id: int) -> List[Dict[
 def upsert_groups(client: Client, groups: List[Dict[str, Any]]) -> None:
     """Upsert groups into the database using bulk operations."""
     if not groups:
+        return
+    
+    # Check for mock mode
+    if is_mock_mode():
+        print("    [MOCK MODE] Groups upsert - dumping examples:")
+        dump_data_examples("groups", groups, "UPSERT", max_examples=5)
+        print(f"    [MOCK] Would upsert {len(groups)} groups")
         return
     
     schema = get_db_schema()
@@ -120,13 +128,25 @@ def upsert_groups(client: Client, groups: List[Dict[str, Any]]) -> None:
             to_upsert.append(group)
         
         if to_upsert:
-            table.upsert(to_upsert, on_conflict="group_id").execute()
-            print(f"    Upserted {len(to_upsert)} groups (skipped {skipped} unchanged)")
+            print(f"    Attempting to upsert {len(to_upsert)} groups...")
+            try:
+                result = table.upsert(to_upsert, on_conflict="group_id").execute()
+                print(f"    ✅ Successfully executed upsert for {len(to_upsert)} groups (skipped {skipped} unchanged)")
+            except Exception as upsert_err:
+                print(f"    ❌ Error during upsert execution: {upsert_err}")
+                import traceback
+                traceback.print_exc()
+                raise  # Re-raise to trigger fallback
         else:
-            print(f"    All {len(groups)} groups up to date (skipped)")
+            if skipped > 0:
+                print(f"    All {len(groups)} groups up to date (skipped {skipped} unchanged)")
+            else:
+                print(f"    ⚠️  No groups to upsert (total scraped: {len(groups)})")
             
     except Exception as e:
         print(f"    Error in bulk upsert, falling back to individual operations: {e}")
+        import traceback
+        traceback.print_exc()
         for group in groups:
             try:
                 table.upsert(group, on_conflict="group_id").execute()

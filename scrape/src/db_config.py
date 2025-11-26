@@ -106,3 +106,19 @@ def get_category_whitelist() -> Optional[List[str]]:
     items = [item.strip() for item in whitelist_str.split(",") if item.strip()]
     return items if items else None
 
+
+def is_mock_mode() -> bool:
+    """
+    Check if mock mode is enabled.
+    When enabled, database operations will be mocked and data will be dumped instead of written.
+    
+    Reads from:
+    - Environment variable MOCK_DB_OPERATIONS (takes precedence)
+    - .env file MOCK_DB_OPERATIONS entry
+    
+    Returns:
+        True if mock mode is enabled, False otherwise.
+    """
+    mock_str = os.getenv("MOCK_DB_OPERATIONS", "false").lower()
+    return mock_str in ("true", "1", "yes", "on")
+

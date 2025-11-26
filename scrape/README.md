@@ -14,6 +14,7 @@ A Python scraper for extracting trading card game data from [tcgcsv.com](https:/
 - **Category Whitelist**: Filter categories to scrape using environment variable
 - **Extended Data Tracking**: Track distinct extended data keys per category
 - **Product Cards**: Generate HTML product card pages with special handling for card text attributes
+- **Mock Mode**: Test the scraper without writing to the database - dumps example data instead
 
 ## Requirements
 
@@ -74,6 +75,10 @@ CATEGORY_WHITELIST=
   - Use `public` for the default Supabase schema
   - Use `tcg` for a custom schema (requires enabling in Supabase API settings)
 - **CATEGORY_WHITELIST**: Optional comma-separated list of category IDs or names to limit scraping scope
+- **MOCK_DB_OPERATIONS**: Set to `true` to enable mock mode (default: `false`)
+  - When enabled, all database write operations are mocked
+  - Data that would be inserted/updated is dumped to console with examples
+  - Useful for testing the scraper without modifying the database
 
 ## Database Setup
 
@@ -110,6 +115,28 @@ The scraper will:
 2. For each category, fetch and upsert all groups
 3. For each group, fetch and upsert all products and extended data
 4. For each product, fetch and upsert current and historical prices
+
+### Mock Mode (Testing Without Database Writes)
+
+To test the scraper without writing to the database, enable mock mode:
+
+```bash
+# Set environment variable
+export MOCK_DB_OPERATIONS=true
+
+# Or add to .env file
+echo "MOCK_DB_OPERATIONS=true" >> .env
+
+# Then run the scraper
+python src/main.py
+```
+
+In mock mode:
+- All database write operations (inserts, updates, upserts) are mocked
+- Example data that would be inserted is dumped to the console
+- Shows up to 3-5 examples per table type
+- Database reads still work (to determine what to scrape)
+- Useful for verifying data structure and scraper behavior before running on production
 
 ### Generating Product Cards
 
