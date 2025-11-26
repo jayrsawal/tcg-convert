@@ -15,37 +15,40 @@ import requests
 from bs4 import BeautifulSoup
 from supabase import Client
 
-from db_config import get_db_schema, is_mock_mode
+from db_config import get_db_schema, is_mock_mode, should_scrape_vendor
 from mock_utils import dump_data_examples
 
 
 KANZEN_BASE_URL = "https://kanzengames.com"
 KANZEN_COLLECTION_PATH = "/collections/gundam-singles-all"
+STORE_401_BASE_URL = "https://store.401games.ca"
+CURRENCY_RATES_URL = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json"
+FASTSIMON_API_URL = (
+    "https://api.fastsimon.com/categories_navigation"
+    "?page_num=1&products_per_page=999999&facets_required=1"
+    "&with_product_attributes=false&request_source=v-next-ssr&src=v-next-ssr"
+    "&UUID=d3cae9c0-9d9b-4fe3-ad81-873270df14b5&uuid=d3cae9c0-9d9b-4fe3-ad81-873270df14b5"
+    "&store_id=17041809&api_type=json&narrow=%5B%5D&sort_by=relevance&category_id=313010651323"
+)
 HTTP_TIMEOUT = 30
 USER_AGENT = "Mozilla/5.0 (compatible; TCGScraper/1.0)"
 AMBIGUOUS_LOG_SHOWN = False
 
-RARITY_PRIORITY = [
-    "lr++",
-    "lr+",
-    "lr",
-    "legend rare",
-    "legendary rare",
-    "r+",
-    "r",
-    "rare",
-    "u+",
-    "u",
-    "uncommon",
-    "c+",
-    "c",
-    "common",
-]
+RARITY_PRIORITY = ["lr", "r", "u", "c"]
 RARITY_PRIORITY_MAP = {value: idx for idx, value in enumerate(RARITY_PRIORITY)}
+RARITY_EQUIVALENTS = {
+    "legend rare": "lr",
+    "legendary rare": "lr",
+    "rare": "r",
+    "uncommon": "u",
+    "common": "c",
+}
 
 META_NUMBER = "_meta_number"
 META_GROUP = "_meta_group"
 META_RARITY_HINT = "_meta_rarity_hint"
+META_VENDOR_GROUP_ABBREV = "_meta_vendor_group_abbrev"
+META_VENDOR_GROUP_NAME_ONLY = "_meta_vendor_group_name_only"
 
 
 def _current_hour_iso() -> str:
@@ -91,8 +94,62 @@ def _extract_title_metadata(title: str) -> Dict[str, Optional[str]]:
 
     return metadata
 
+def _fetch_currency_rates() -> Dict[str, float]:
+    """Fetch and cache USD-based currency conversion rates."""
+    try:
+        response = requests.get(CURRENCY_RATES_URL, timeout=HTTP_TIMEOUT)
+        response.raise_for_status()
+        payload = response.json()
+        rates = payload.get("usd", {})
+        return {k.lower(): float(v) for k, v in rates.items() if v}
+    except Exception as exc:
+        print(f"  ⚠️  Could not fetch currency conversion rates: {exc}")
+        return {}
 
-def _fetch_kanzen_products() -> List[Dict[str, Any]]:
+
+def _convert_to_usd(value: Optional[float], currency: str, rates: Dict[str, float]) -> Optional[float]:
+    """Convert a numeric price value from the given currency to USD."""
+    if value is None:
+        return None
+
+
+def _normalize_rarity_value(value: Optional[str]) -> tuple[Optional[str], int]:
+    if not value:
+        return None, 0
+    cleaned = value.strip().lower()
+    plus_count = 0
+    while cleaned.endswith("+"):
+        plus_count += 1
+        cleaned = cleaned[:-1]
+    cleaned = cleaned.strip()
+    base = RARITY_EQUIVALENTS.get(cleaned, cleaned if cleaned else None)
+    return base, plus_count
+
+
+def _rarity_strings_equal(a: Optional[str], b: Optional[str]) -> bool:
+    base_a, plus_a = _normalize_rarity_value(a)
+    base_b, plus_b = _normalize_rarity_value(b)
+    return base_a is not None and base_a == base_b and plus_a == plus_b
+
+
+def _rarity_sort_key(value: Optional[str]) -> tuple[int, int]:
+    base, plus = _normalize_rarity_value(value)
+    priority = RARITY_PRIORITY_MAP.get(base or "", len(RARITY_PRIORITY))
+    return (priority, -(plus or 0))
+    currency_key = currency.lower()
+    if currency_key == "usd":
+        return round(value, 6)
+    rate = rates.get(currency_key)
+    if not rate:
+        return None
+    try:
+        usd_value = value / rate
+        return round(usd_value, 6)
+    except Exception:
+        return None
+
+
+def _fetch_kanzen_products(currency_rates: Dict[str, float]) -> List[Dict[str, Any]]:
     """Scrape all paginated Kanzen Gundam singles listings."""
     records: List[Dict[str, Any]] = []
     next_url = urljoin(KANZEN_BASE_URL, KANZEN_COLLECTION_PATH)
@@ -132,15 +189,19 @@ def _fetch_kanzen_products() -> List[Dict[str, Any]]:
                 else (urljoin(KANZEN_BASE_URL, quickshop_rel) if quickshop_rel else None)
             )
 
+            price_single_value = _parse_price_value(price_single)
+            price_min_value = _parse_price_value(price_min)
+            price_max_value = _parse_price_value(price_max)
+
             record = {
                 "vendor": vendor_domain,
                 "title": title,
                 "price_single_text": price_single,
-                "price_single_value": _parse_price_value(price_single),
+                "price_single_value": _convert_to_usd(price_single_value, "cad", currency_rates) or price_single_value,
                 "price_min_text": price_min,
-                "price_min_value": _parse_price_value(price_min),
+                "price_min_value": _convert_to_usd(price_min_value, "cad", currency_rates) or price_min_value,
                 "price_max_text": price_max,
-                "price_max_value": _parse_price_value(price_max),
+                "price_max_value": _convert_to_usd(price_max_value, "cad", currency_rates) or price_max_value,
                 "quickshop_url": quickshop_url,
                 "source_url": next_url,
                 "fetched_at": fetched_at,
@@ -165,6 +226,92 @@ def _fetch_kanzen_products() -> List[Dict[str, Any]]:
             next_url = href if href.startswith("http") else urljoin(KANZEN_BASE_URL, href)
         else:
             break
+
+    return records
+
+
+def _parse_401_group_label(label: Optional[str]) -> Dict[str, Optional[str]]:
+    """
+    Parse Fast Simon group label format: "{abbr} {type}: {name}".
+    Returns dict with abbreviation and name components.
+    """
+    result = {"abbreviation": None, "name": None, "full": None}
+    if not label:
+        return result
+    result["full"] = label.strip()
+
+    parts = label.split(":", 1)
+    if len(parts) == 2:
+        left, name = parts
+        result["name"] = name.strip() or None
+        left = left.strip()
+        if left:
+            tokens = left.split()
+            if tokens:
+                result["abbreviation"] = tokens[0].strip()
+    else:
+        result["name"] = label.strip() or None
+    return result
+
+
+def _fetch_401games_products(currency_rates: Dict[str, float]) -> List[Dict[str, Any]]:
+    """Fetch vendor pricing data from 401 Games Fast Simon API."""
+    vendor_domain = "store.401games.ca"
+    fetched_at = _current_hour_iso()
+    headers = {"User-Agent": USER_AGENT}
+
+    try:
+        response = requests.get(FASTSIMON_API_URL, headers=headers, timeout=HTTP_TIMEOUT)
+        response.raise_for_status()
+    except Exception as exc:
+        print(f"  ❌ Error fetching 401 Games data: {exc}")
+        return []
+
+    payload = response.json()
+    items = payload.get("items", [])
+    records: List[Dict[str, Any]] = []
+
+    for item in items:
+        title = item.get("l")
+        if not title:
+            continue
+
+        price_single = item.get("p") or None
+        price_min = item.get("p_min") or None
+        price_max = item.get("p_max") or None
+        quickshop_rel = item.get("u") or ""
+        quickshop_url = urljoin(STORE_401_BASE_URL, quickshop_rel)
+
+        price_single_value = _parse_price_value(price_single)
+        price_min_value = _parse_price_value(price_min)
+        price_max_value = _parse_price_value(price_max)
+
+        record = {
+            "vendor": vendor_domain,
+            "title": title,
+            "price_single_text": price_single,
+            "price_single_value": _convert_to_usd(price_single_value, "cad", currency_rates) or price_single_value,
+            "price_min_text": price_min,
+            "price_min_value": _convert_to_usd(price_min_value, "cad", currency_rates) or price_min_value,
+            "price_max_text": price_max,
+            "price_max_value": _convert_to_usd(price_max_value, "cad", currency_rates) or price_max_value,
+            "quickshop_url": quickshop_url,
+            "source_url": FASTSIMON_API_URL,
+            "fetched_at": fetched_at,
+            "product_id": None,
+            "raw": json.dumps(item),
+        }
+
+        record.update(_extract_title_metadata(title))
+
+        group_info = _parse_401_group_label(item.get("v"))
+        if group_info.get("full"):
+            record[META_GROUP] = group_info["full"]
+        if group_info.get("abbreviation"):
+            record[META_VENDOR_GROUP_ABBREV] = group_info["abbreviation"]
+        if group_info.get("name"):
+            record[META_VENDOR_GROUP_NAME_ONLY] = group_info["name"]
+        records.append(record)
 
     return records
 
@@ -265,17 +412,48 @@ def _match_product_for_record(
     if len(candidates) == 1:
         return candidates[0]["product_id"]
 
-    group_name = record.get(META_GROUP)
-    filtered = candidates
-    if group_name:
-        group_ids = group_ids_by_name.get(group_name.strip().lower())
-        if group_ids:
-            filtered = [c for c in filtered if c.get("group_id") in group_ids]
-            if len(filtered) == 1:
-                return filtered[0]["product_id"]
-        else:
-            print(f"  ⚠️  Group '{group_name}' not found in groups table")
+    def resolve_group_ids() -> tuple[Optional[Set[int]], bool]:
+        hint_used = False
+        group_name_hint = record.get(META_GROUP)
+        if group_name_hint:
+            hint_used = True
+            key = group_name_hint.strip().lower()
+            if key in group_ids_by_name:
+                return group_ids_by_name[key], hint_used
 
+        vendor = record.get("vendor")
+        if vendor == "store.401games.ca":
+            abbr = record.get(META_VENDOR_GROUP_ABBREV)
+            if abbr:
+                hint_used = True
+                abbr_key = abbr.strip().lower()
+                matches: Set[int] = set()
+                for name_key, ids in group_ids_by_name.items():
+                    if name_key.startswith(abbr_key):
+                        matches.update(ids)
+                if matches:
+                    return matches, hint_used
+
+            name_hint = record.get(META_VENDOR_GROUP_NAME_ONLY)
+            if name_hint:
+                hint_used = True
+                target = name_hint.strip().lower()
+                matches: Set[int] = set()
+                for name_key, ids in group_ids_by_name.items():
+                    suffix = name_key.split(":")[-1].strip()
+                    if suffix == target:
+                        matches.update(ids)
+                if matches:
+                    return matches, hint_used
+
+        return None, hint_used
+
+    filtered = candidates
+    group_ids, hint_used = resolve_group_ids()
+    if group_ids:
+        filtered = [c for c in filtered if c.get("group_id") in group_ids]
+        if len(filtered) == 1:
+            return filtered[0]["product_id"]
     if len(filtered) > 1:
         rarity_phrase = None
         rarity_match = re.search(r"\(([A-Za-z0-9\+\s]+)\)", record["title"])
@@ -286,7 +464,7 @@ def _match_product_for_record(
 
         if rarity_phrase:
             rarity_filtered = [
-                c for c in filtered if (c.get("rarity") or "").lower() == rarity_phrase
+                c for c in filtered if _rarity_strings_equal(c.get("rarity"), rarity_phrase)
             ]
             if len(rarity_filtered) == 1:
                 return rarity_filtered[0]["product_id"]
@@ -303,18 +481,15 @@ def _match_product_for_record(
     if len(filtered) == 1:
         return filtered[0]["product_id"]
 
-    sorted_candidates = sorted(
-        filtered,
-        key=lambda c: RARITY_PRIORITY_MAP.get((c.get("rarity") or "").lower(), len(RARITY_PRIORITY)),
-    )
+    sorted_candidates = sorted(filtered, key=lambda c: _rarity_sort_key(c.get("rarity")))
     chosen = sorted_candidates[0] if sorted_candidates else None
 
     if chosen:
         return chosen.get("product_id")
 
     print(
-        f"  ⚠️  Unable to resolve '{record['title']}' "
-        f"(number={number}, group={group_name}) after rarity fallback"
+        f"  ⚠️  Unable to match vendor product '{record['title']}' "
+        f"(number={number}) to a unique product_id"
     )
     return None
 
@@ -346,6 +521,15 @@ def _strip_internal_fields(records: List[Dict[str, Any]]) -> List[Dict[str, Any]
     return cleaned
 
 
+def _dedupe_vendor_records(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Remove duplicate (vendor,title) combos, keeping the last occurrence."""
+    deduped: Dict[tuple, Dict[str, Any]] = {}
+    for record in records:
+        key = (record.get("vendor"), record.get("title"))
+        deduped[key] = record
+    return list(deduped.values())
+
+
 def upsert_vendor_prices(client: Client, records: List[Dict[str, Any]]) -> None:
     """Upsert current vendor prices (vendor/title conflict)."""
     if not records:
@@ -363,7 +547,8 @@ def upsert_vendor_prices(client: Client, records: List[Dict[str, Any]]) -> None:
         else client.table("vendor_prices")
     )
 
-    cleaned_records = _strip_internal_fields(records)
+    deduped_records = _dedupe_vendor_records(records)
+    cleaned_records = _strip_internal_fields(deduped_records)
 
     try:
         print(f"  Upserting {len(cleaned_records)} vendor prices...")
@@ -421,13 +606,29 @@ def scrape_vendor_prices(client: Client) -> None:
     """Entry point to scrape vendor data and persist to Supabase."""
     print("\n=== Vendor Price Scraping (Kanzen Games) ===")
     try:
-        records = _fetch_kanzen_products()
-        print(f"  Collected {len(records)} vendor price records")
+        currency_rates = _fetch_currency_rates()
+        if not currency_rates:
+            print("  ⚠️  Currency rates unavailable; price_value columns will use vendor currency values.")
+        all_records: List[Dict[str, Any]] = []
 
-        _match_products_to_vendor_records(client, records)
+        if should_scrape_vendor("kanzengames"):
+            kanzen_records = _fetch_kanzen_products(currency_rates)
+            print(f"  Collected {len(kanzen_records)} Kanzen vendor price records")
+            all_records.extend(kanzen_records)
+        else:
+            print("  ⏭️  Skipping Kanzen vendor scraping (SCRAPE_VENDOR_KANZENGAMES=false)")
 
-        upsert_vendor_prices(client, records)
-        insert_vendor_prices_history(client, records)
+        if should_scrape_vendor("401games"):
+            games401_records = _fetch_401games_products(currency_rates)
+            print(f"  Collected {len(games401_records)} 401 Games vendor price records")
+            all_records.extend(games401_records)
+        else:
+            print("  ⏭️  Skipping 401 Games vendor scraping (SCRAPE_VENDOR_401GAMES=false)")
+
+        _match_products_to_vendor_records(client, all_records)
+
+        upsert_vendor_prices(client, all_records)
+        insert_vendor_prices_history(client, all_records)
         print("✅ Vendor price scraping completed.")
     except Exception as exc:
         print(f"❌ Vendor price scraping failed: {exc}")

@@ -218,3 +218,15 @@ def should_scrape_vendor_prices() -> bool:
     scrape_str = os.getenv("SCRAPE_VENDOR_PRICES", "false").lower()
     return scrape_str in ("true", "1", "yes", "on")
 
+
+def should_scrape_vendor(vendor_name: str) -> bool:
+    """
+    Check if a specific vendor should be scraped.
+    
+    Reads from environment variable: SCRAPE_VENDOR_<NAME>
+    Defaults to True when not explicitly set to false.
+    """
+    env_key = f"SCRAPE_VENDOR_{vendor_name.upper()}"
+    scrape_str = os.getenv(env_key, "true").lower()
+    return scrape_str in ("true", "1", "yes", "on")
+

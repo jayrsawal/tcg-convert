@@ -68,9 +68,11 @@ DB_SCHEMA=public
 CATEGORY_WHITELIST=
 
 # Scraper Selection
-# SCRAPE_TCGCSV=true          # Enable/disable TCGCSV scraping (default true)
-# SCRAPE_CARDTRADER=true      # Enable/disable CardTrader scraping (default true)
-# SCRAPE_VENDOR_PRICES=false  # Enable vendor scraping (default false)
+# SCRAPE_TCGCSV=true                # Enable/disable TCGCSV scraping (default true)
+# SCRAPE_CARDTRADER=true            # Enable/disable CardTrader scraping (default true)
+# SCRAPE_VENDOR_PRICES=false        # Master toggle for vendor scraping
+# SCRAPE_VENDOR_KANZENGAMES=true    # Vendor-specific toggle (default true)
+# SCRAPE_VENDOR_401GAMES=true       # Vendor-specific toggle (default true)
 
 # CardTrader API Configuration (optional, required if SCRAPE_CARDTRADER=true)
 # CARDTRADER_KEY=your-jwt-bearer-token
@@ -94,8 +96,9 @@ CATEGORY_WHITELIST=
   - Set to `false` to skip TCGCSV scraping entirely
 - **SCRAPE_CARDTRADER**: Enable/disable CardTrader scraping (default: `true`)
   - Set to `false` to skip CardTrader scraping entirely
-- **SCRAPE_VENDOR_PRICES**: Enable/disable vendor scraping (default: `false`)
-  - Set to `true` to scrape Kanzen Games (and future vendor integrations)
+- **SCRAPE_VENDOR_PRICES**: Master toggle for vendor scraping (default: `false`)
+- **SCRAPE_VENDOR_KANZENGAMES**: Enable/disable Kanzen vendor scraping (default: `true`)
+- **SCRAPE_VENDOR_401GAMES**: Enable/disable 401 Games vendor scraping (default: `true`)
 - **CARDTRADER_KEY**: JWT bearer token for CardTrader API authentication (required if SCRAPE_CARDTRADER=true)
 - **CARDTRADER_GAME_WHITELIST**: Optional comma-separated list of game IDs to limit CardTrader expansion/blueprint scraping
 
