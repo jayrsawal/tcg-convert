@@ -92,6 +92,36 @@ const ProductsPage = () => {
   const productsGridWrapperRef = useRef(null);
   const screenshotWrapperWidth = 1400;
   const [isUpdatingInventory, setIsUpdatingInventory] = useState(false);
+  const getProductNumberValue = useCallback((product) => {
+    if (!product) return '';
+    const direct = product.Number || product.number;
+    if (direct) return String(direct).toUpperCase();
+    const extendedData = extractExtendedDataFromProduct(product) || [];
+    const numberEntry = extendedData.find((item) => {
+      const key = (item.key || item.name || '').toUpperCase();
+      return key === 'NUMBER';
+    });
+    return numberEntry ? String(numberEntry.value || numberEntry.val || '').toUpperCase() : '';
+  }, []);
+
+  const getSortParams = (option) => {
+    if (option?.startsWith('number')) {
+      return {
+        field: 'number',
+        order: option.endsWith('desc') ? 'desc' : 'asc'
+      };
+    }
+    if (option?.startsWith('name')) {
+      return {
+        field: 'name',
+        order: option.endsWith('desc') ? 'desc' : 'asc'
+      };
+    }
+    return {
+      field: 'product_id',
+      order: option?.includes('desc') ? 'desc' : 'asc'
+    };
+  };
   
   const loadingProductsRef = useRef(false);
   const loadingGroupsRef = useRef(false);
@@ -427,12 +457,13 @@ const ProductsPage = () => {
         // Normal pagination flow using filter endpoint
         // When searching, use a larger page size to reduce network calls
         const pageLimit = searchQuery && searchQuery.trim() ? 1000 : 64;
+        const { field: sortField, order: sortOrder } = getSortParams(sortOption);
         const filterParams = {
           category_id: parseInt(categoryId, 10),
           group_id: selectedGroupId,
           filters: attributeFilters,
-          sort_by: sortOption.includes('name') ? 'name' : 'product_id',
-          sort_order: sortOption.includes('desc') ? 'desc' : 'asc',
+          sort_by: sortField,
+          sort_order: sortOrder,
           page: page,
           limit: pageLimit  // Use larger limit when searching
         };
@@ -641,11 +672,12 @@ const ProductsPage = () => {
 
     try {
       loadingAllProductsRef.current = true;
+      const { field: sortField, order: sortOrder } = getSortParams(sortOption);
       const filterParams = {
         category_id: parseInt(categoryId, 10),
         filters: {},
-        sort_by: 'name',
-        sort_order: 'asc'
+        sort_by: sortField,
+        sort_order: sortOrder
       };
 
       const response = await filterProducts(filterParams);
@@ -671,7 +703,7 @@ const ProductsPage = () => {
     } finally {
       loadingAllProductsRef.current = false;
     }
-  }, [categoryId, mergeProductsIntoMap]);
+  }, [categoryId, mergeProductsIntoMap, sortOption]);
 
   const loadPricesForInventoryProducts = useCallback(async () => {
     const allProductsArray = Object.values(productsMap);
@@ -731,17 +763,26 @@ const ProductsPage = () => {
 
     // Sort
     filtered.sort((a, b) => {
-      if (sortOption.includes('name')) {
+      if (sortOption.startsWith('name')) {
         const aName = (a.name || '').toLowerCase();
         const bName = (b.name || '').toLowerCase();
-        return sortOption.includes('desc') 
+        return sortOption === 'name-desc'
           ? bName.localeCompare(aName)
           : aName.localeCompare(bName);
-      } else {
-        const aId = a.product_id || a.id || 0;
-        const bId = b.product_id || b.id || 0;
-        return sortOption.includes('desc') ? bId - aId : aId - bId;
       }
+      if (sortOption.startsWith('number')) {
+        const aNum = getProductNumberValue(a);
+        const bNum = getProductNumberValue(b);
+        if (!aNum && !bNum) return 0;
+        if (!aNum) return sortOption === 'number-asc' ? 1 : -1;
+        if (!bNum) return sortOption === 'number-asc' ? -1 : 1;
+        return sortOption === 'number-desc'
+          ? bNum.localeCompare(aNum, undefined, { numeric: true, sensitivity: 'base' })
+          : aNum.localeCompare(bNum, undefined, { numeric: true, sensitivity: 'base' });
+      }
+      const aId = a.product_id || a.id || 0;
+      const bId = b.product_id || b.id || 0;
+      return sortOption.includes('desc') ? bId - aId : aId - bId;
     });
 
     setFilteredProducts(filtered);

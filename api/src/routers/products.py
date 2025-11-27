@@ -19,7 +19,7 @@ class ProductFilter(BaseModel):
     group_id: Optional[int] = None
     numbers: Optional[List[Union[str, int]]] = None  # Filter by number column. Multiple values use OR logic (e.g., ["001", "002", "003"])
     filters: Dict[str, Union[str, List[str]]] = {}  # Key-value pairs for extended data filtering. Single values or lists of values. Multiple values for a key use OR logic, different keys use AND logic (e.g., {"Rarity": ["Common", "Rare"], "Number": "001"})
-    sort_by: Optional[str] = "name"  # Sort field: "name" or "product_id"
+    sort_by: Optional[str] = "name"  # Sort field: "name", "product_id", or "number"
     sort_order: Optional[str] = "asc"  # Sort order: "asc" or "desc"
 
 
@@ -312,7 +312,7 @@ async def filter_products(
     - If group_id is provided, products are filtered by group
     - If numbers is provided, products are filtered by number column (multiple numbers use OR logic)
     - All filters (category_id, group_id, numbers, and filters dict) are combined with AND logic
-    - Results can be sorted by name or product_id, ascending or descending
+    - Results can be sorted by name, product_id, or number, ascending or descending
     
     **Examples:**
     - {"Rarity": "Common", "Number": "001"} - Products with Rarity=Common AND Number=001
@@ -323,8 +323,8 @@ async def filter_products(
     """
     try:
         # Validate sort parameters
-        if filter_data.sort_by not in ["name", "product_id"]:
-            raise HTTPException(status_code=400, detail="sort_by must be 'name' or 'product_id'")
+        if filter_data.sort_by not in ["name", "product_id", "number"]:
+            raise HTTPException(status_code=400, detail="sort_by must be 'name', 'product_id', or 'number'")
         if filter_data.sort_order not in ["asc", "desc"]:
             raise HTTPException(status_code=400, detail="sort_order must be 'asc' or 'desc'")
         
@@ -487,6 +487,10 @@ async def filter_products(
                 query = query.order("name", desc=sort_desc)
                 # Secondary sort by product_id for consistency
                 query = query.order("product_id", desc=False)
+            elif filter_data.sort_by == "number":
+                query = query.order("number", desc=sort_desc)
+                # Secondary sort by product_id for consistency
+                query = query.order("product_id", desc=False)
             else:  # product_id
                 query = query.order("product_id", desc=sort_desc)
             
@@ -521,6 +525,10 @@ async def filter_products(
                 # Apply sorting
                 if filter_data.sort_by == "name":
                     query = query.order("name", desc=sort_desc)
+                    query = query.order("product_id", desc=False)
+                elif filter_data.sort_by == "number":
+                    # Only sort by number if the column exists (we're in the try block that has number)
+                    query = query.order("number", desc=sort_desc)
                     query = query.order("product_id", desc=False)
                 else:  # product_id
                     query = query.order("product_id", desc=sort_desc)

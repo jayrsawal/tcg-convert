@@ -100,6 +100,40 @@ const DeckBuilderPage = () => {
   });
   const screenshotWrapperWidth = 1400;
   const pendingNavigationRef = useRef(null);
+  const getProductNumberValue = useCallback((product) => {
+    if (!product) return '';
+    const directNumber = product.Number || product.number;
+    if (directNumber) {
+      return String(directNumber).toUpperCase();
+    }
+    const productId = String(product.product_id || product.id || '');
+    if (!productId) return '';
+    const extData = productExtendedData[productId] || [];
+    const numberEntry = extData.find((item) => {
+      const key = (item.key || item.name || '').toUpperCase();
+      return key === 'NUMBER';
+    });
+    return numberEntry ? String(numberEntry.value || numberEntry.val || '').toUpperCase() : '';
+  }, [productExtendedData]);
+
+  const getSortParams = (option) => {
+    if (option?.startsWith('number')) {
+      return {
+        field: 'number',
+        order: option.endsWith('desc') ? 'desc' : 'asc'
+      };
+    }
+    if (option?.startsWith('name')) {
+      return {
+        field: 'name',
+        order: option.endsWith('desc') ? 'desc' : 'asc'
+      };
+    }
+    return {
+      field: 'product_id',
+      order: option?.includes('desc') ? 'desc' : 'asc'
+    };
+  };
   
   // History for undo functionality
   const [history, setHistory] = useState([]);
@@ -335,13 +369,22 @@ const DeckBuilderPage = () => {
 
     // Sort
     filtered.sort((a, b) => {
-      const aName = (a.name || '').toLowerCase();
-      const bName = (b.name || '').toLowerCase();
-      
-      if (sortOption === 'name-asc') {
-        return aName.localeCompare(bName);
-      } else if (sortOption === 'name-desc') {
-        return bName.localeCompare(aName);
+      if (sortOption === 'name-asc' || sortOption === 'name-desc') {
+        const aName = (a.name || '').toLowerCase();
+        const bName = (b.name || '').toLowerCase();
+        return sortOption === 'name-desc'
+          ? bName.localeCompare(aName)
+          : aName.localeCompare(bName);
+      }
+      if (sortOption === 'number-asc' || sortOption === 'number-desc') {
+        const aNum = getProductNumberValue(a);
+        const bNum = getProductNumberValue(b);
+        if (!aNum && !bNum) return 0;
+        if (!aNum) return sortOption === 'number-asc' ? 1 : -1;
+        if (!bNum) return sortOption === 'number-asc' ? -1 : 1;
+        return sortOption === 'number-desc'
+          ? bNum.localeCompare(aNum, undefined, { numeric: true, sensitivity: 'base' })
+          : aNum.localeCompare(bNum, undefined, { numeric: true, sensitivity: 'base' });
       }
       return 0;
     });
@@ -734,12 +777,13 @@ const DeckBuilderPage = () => {
         // Normal pagination flow using filter endpoint
         // When searching, use a larger page size to reduce network calls
         const pageLimit = searchQuery && searchQuery.trim() ? 1000 : 64;
+        const { field: sortField, order: sortOrder } = getSortParams(sortOption);
         const filterParams = {
           category_id: deckList.category_id,
           group_id: selectedGroupId,
           filters: attributeFilters,
-          sort_by: sortOption.includes('name') ? 'name' : 'product_id',
-          sort_order: sortOption.includes('desc') ? 'desc' : 'asc',
+          sort_by: sortField,
+          sort_order: sortOrder,
           page: page,
           limit: pageLimit  // Use larger limit when searching
         };
