@@ -48,7 +48,7 @@ const NavigationBar = ({ className = '' }) => {
                 to="/inventory" 
                 className={`nav-link ${isActive('/inventory') ? 'nav-link-active' : ''}`}
               >
-                Inventory
+                Browse
               </Link>
               <Link 
                 to="/deck-lists" 
@@ -78,6 +78,18 @@ const NavigationBar = ({ className = '' }) => {
             </div>
           ) : (
             <div className="auth-links">
+              <Link 
+                to="/inventory" 
+                className={`nav-link ${isActive('/inventory') ? 'nav-link-active' : ''}`}
+              >
+                Browse
+              </Link>
+              <Link 
+                to="/deck-lists" 
+                className={`nav-link ${isActive('/deck-lists') ? 'nav-link-active' : ''}`}
+              >
+                Deck Lists
+              </Link>
               <Link 
                 to="/login" 
                 className={`nav-link ${isActive('/login') ? 'nav-link-active' : ''}`}

@@ -255,6 +255,62 @@ export const fetchPriceHistory = async (productId) => {
 };
 
 /**
+ * Fetch current vendor prices for a product
+ * @param {number} productId - Product ID
+ * @returns {Promise<Array>} Array of vendor price objects
+ */
+export const fetchVendorPrices = async (productId) => {
+  try {
+    const url = API_BASE_URL 
+      ? `${API_BASE_URL}/vendor-prices/by-product?product_ids=${productId}&page=1&limit=100`
+      : `/vendor-prices/by-product?product_ids=${productId}&page=1&limit=100`;
+    
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return [];
+      }
+      throw new Error(`Failed to fetch vendor prices: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return Array.isArray(data) ? data : (data.prices || data.data || []);
+  } catch (error) {
+    console.error('Error fetching vendor prices:', error);
+    return [];
+  }
+};
+
+/**
+ * Fetch vendor price history for a product
+ * @param {number} productId - Product ID
+ * @returns {Promise<Array>} Array of vendor price history objects
+ */
+export const fetchVendorPriceHistory = async (productId) => {
+  try {
+    const url = API_BASE_URL 
+      ? `${API_BASE_URL}/vendor-prices/history/by-product?product_ids=${productId}&page=1&limit=100`
+      : `/vendor-prices/history/by-product?product_ids=${productId}&page=1&limit=100`;
+    
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return [];
+      }
+      throw new Error(`Failed to fetch vendor price history: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return Array.isArray(data) ? data : (data.history || data.data || []);
+  } catch (error) {
+    console.error('Error fetching vendor price history:', error);
+    return [];
+  }
+};
+
+/**
  * Fetch current market prices for multiple products
  * @param {Array<number>} productIds - Array of product IDs
  * @returns {Promise<Object>} Map of product_id to price object

@@ -169,10 +169,12 @@
   display: grid;
   grid-template-columns: 300px 1fr;
   gap: 40px;
+  align-items: flex-start;
   margin-bottom: 40px;
 }
 
 .product-image-section {
+  margin-bottom: 0;
   position: relative;
 }
 
@@ -222,6 +224,8 @@
 }
 
 .product-number-big {
+  margin-left: 10px;
+  display: inline-block;
   color: #718096;
   font-size: 28px;
   font-weight: 500;
@@ -272,8 +276,53 @@
 .release-info,
 .textual-information-section,
 .extended-data-section,
-.pricing-section,
-.price-history-section,
+.market-section {
+  margin-bottom: 32px;
+  width: 100%;
+}
+
+.market-content-wrapper {
+  display: flex;
+  flex-direction: row;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.price-history-section {
+  flex: 1;
+  min-width: 0;
+}
+
+.pricing-section {
+  flex: 0 0 400px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.pricing-section::-webkit-scrollbar {
+  width: 6px;
+}
+
+.pricing-section::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.pricing-section::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 3px;
+}
+
+.pricing-section::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
+.pricing-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .product-details {
   margin-bottom: 32px;
 }
@@ -341,6 +390,204 @@
   white-space: pre-wrap;
 }
 
+/* Keyword highlighting styles */
+.description-keyword {
+  display: inline-block;
+  padding: 2px 4px;
+  margin: 2px;
+  font-weight: 600;
+  border-width: 2px;
+  border-style: solid;
+}
+
+.description-keyword-square {
+  border-radius: 0;
+}
+
+.description-keyword-rounded {
+  border-radius: 4px;
+}
+
+.description-keyword-fully-rounded {
+  border-radius: 50px;
+}
+
+/* Main wrapper to contain left column and description (side by side) */
+.product-card-main-wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch; /* Make both columns same height */
+  gap: 20px;
+}
+
+/* Left Column: Level/Cost and Stats stacked vertically */
+.product-card-left-column {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  /* This column's height will determine description height */
+}
+
+/* Level and Cost Section (left side, vertically stacked, centered) */
+.product-card-level-cost {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  min-width: 132px;
+  box-sizing: border-box;
+  position: relative; /* For absolute positioning of card type */
+}
+
+.product-card-level {
+  font-size: 16px;
+  font-weight: 600;
+  color: #4a5568;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.product-card-cost-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.product-card-cost-value {
+  font-size: 36px;
+  font-weight: 700;
+  color: #667eea;
+  line-height: 1;
+  text-align: center;
+}
+
+.product-card-cost-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+/* Description Container */
+.product-card-description-container {
+  flex: 1;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* Height matches left column via align-items: stretch on parent */
+}
+
+.product-card-description {
+  line-height: 1.6;
+  white-space: normal;
+  color: #1a202c;
+  flex: 1;
+  width: 100%; /* Ensure text spans full width */
+  margin-bottom: 0;
+}
+
+.product-card-traits {
+  margin-bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.product-card-trait-tag {
+  background: #edf2f7;
+  color: #4a5568;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Card Type - Bottom of level/cost box */
+.product-card-card-type-rotated {
+  position: absolute;
+  bottom: -16px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: #edf2f7;
+  color: #4a5568;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  z-index: 1;
+  text-align: center;
+  min-width: 72px;
+}
+
+/* Stats Wrapper (ATK and HP boxes below level/cost) */
+.product-card-stats-wrapper {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+}
+
+/* When no description, stats are horizontal next to level/cost */
+.product-card-no-description .product-card-stats-wrapper {
+  width: auto;
+  flex: 1;
+}
+
+.product-card-stat-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 16px;
+  padding-top: 40px;
+  background: #f9fafb;
+  min-height: 80px;
+  box-sizing: border-box;
+  min-width: 0; /* Allow flexbox to shrink if needed */
+  overflow: hidden; /* Prevent content from overflowing */
+}
+
+.product-card-stats-horizontal .product-card-stat-box {
+  padding-top: 16px;
+  border-radius: 8px;
+}
+
+.product-card-stat-value {
+  font-size: 28px; /* Reduced from 36px to fit "+" signs better */
+  font-weight: 700;
+  color: #4a5568;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap; /* Prevent wrapping */
+  overflow: hidden;
+  text-overflow: ellipsis; /* Show ellipsis if still too long */
+  max-width: 100%;
+}
+
+.product-card-stat-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .attributes-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -375,12 +622,67 @@
   color: #1a202c;
   font-size: 16px;
   font-weight: 600;
+  line-height: 1.6;
+  white-space: normal;
+  word-wrap: break-word;
 }
 
 .pricing-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
+}
+
+.vendor-pricing-group {
+  margin-bottom: 16px;
+  padding: 16px;
+  background: #f7fafc;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+}
+
+.vendor-pricing-group:last-child {
+  margin-bottom: 0;
+}
+
+.pricing-content .vendor-pricing-group {
+  margin-bottom: 16px;
+}
+
+.pricing-content .vendor-pricing-group:last-child {
+  margin-bottom: 0;
+}
+
+.vendor-header {
+  margin-bottom: 16px;
+}
+
+.vendor-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a202c;
+  margin: 0 0 8px 0;
+}
+
+.vendor-title {
+  font-size: 14px;
+  color: #4a5568;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.vendor-quickshop-link {
+  display: inline-block;
+  color: #667eea;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.vendor-quickshop-link:hover {
+  color: #5568d3;
+  text-decoration: underline;
 }
 
 .price-item {
@@ -405,6 +707,11 @@
   font-weight: 700;
 }
 
+.price-item-direct-low {
+  margin-top: 16px;
+  width: fit-content;
+}
+
 .pricing-loading {
   padding: 20px;
   text-align: center;
@@ -423,10 +730,10 @@
 }
 
 .price-chart-container {
-  margin-top: 24px;
   padding: 24px;
   background: #f9fafb;
   border-radius: 8px;
+  height: 100%;
 }
 
 .price-chart {
@@ -467,6 +774,42 @@
 .chart-label-start,
 .chart-label-end {
   font-weight: 500;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #4a5568;
+}
+
+.legend-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.legend-label {
+  font-weight: 500;
+}
+
+.vendor-price-line {
+  opacity: 0.8;
+}
+
+.vendor-data-point {
+  opacity: 0.8;
 }
 
 .no-chart-data {
@@ -532,6 +875,7 @@
   }
 
   .product-number-big {
+    word-wrap: nowrap;
     font-size: 20px;
   }
 
