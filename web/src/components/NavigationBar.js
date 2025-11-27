@@ -11,6 +11,7 @@ const NavigationBar = ({ className = '' }) => {
   const { selectedCurrency, setSelectedCurrency } = useCurrency();
   const location = useLocation();
   const [username, setUsername] = useState(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const isActive = (path) => {
     return location.pathname === path;
@@ -35,85 +36,109 @@ const NavigationBar = ({ className = '' }) => {
     loadUsername();
   }, [user?.id]);
 
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [location.pathname]);
+
+  const toggleMenu = () => setIsMenuOpen((prev) => !prev);
+
   return (
     <header className={`navigation-bar ${className}`}>
       <div className="header-content">
-        <Link to="/" className="logo-link">
-          <h1 className="logo">TCGConvert</h1>
+        <Link to="/" className="logo-link" aria-label="StrikerPack Home">
+          <img src="/logo-2-small.png" alt="StrikerPack" className="logo-image" />
         </Link>
-        <nav className="header-nav">
-          {user ? (
-            <div className="user-menu">
-              <Link 
-                to="/inventory" 
-                className={`nav-link ${isActive('/inventory') ? 'nav-link-active' : ''}`}
-              >
-                Browse
-              </Link>
-              <Link 
-                to="/deck-lists" 
-                className={`nav-link ${isActive('/deck-lists') ? 'nav-link-active' : ''}`}
-              >
-                Deck Lists
-              </Link>
-              <Link 
-                to="/profile" 
-                className={`nav-link nav-link-icon ${isActive('/profile') ? 'nav-link-active' : ''}`}
-                title="Profile"
-              >
-                <HiUser className="nav-icon" />
-                {username && (
-                  <span className="nav-username">@{username}</span>
-                )}
-                <span className="nav-icon-text">Profile</span>
-              </Link>
-              <button 
-                onClick={signOut} 
-                className="nav-button nav-button-icon" 
-                title="Sign Out"
-              >
-                <HiLogout className="nav-icon nav-icon-red" />
-                <span className="nav-icon-text">Logout</span>
-              </button>
-            </div>
-          ) : (
-            <div className="auth-links">
-              <Link 
-                to="/inventory" 
-                className={`nav-link ${isActive('/inventory') ? 'nav-link-active' : ''}`}
-              >
-                Browse
-              </Link>
-              <Link 
-                to="/deck-lists" 
-                className={`nav-link ${isActive('/deck-lists') ? 'nav-link-active' : ''}`}
-              >
-                Deck Lists
-              </Link>
-              <Link 
-                to="/login" 
-                className={`nav-link ${isActive('/login') ? 'nav-link-active' : ''}`}
-              >
-                Log In
-              </Link>
-              <Link 
-                to="/signup" 
-                className={`nav-link nav-link-primary ${isActive('/signup') ? 'nav-link-active' : ''}`}
-              >
-                Sign Up
-              </Link>
-            </div>
-          )}
-          <div className="nav-currency-selector">
-            <select
-              className="nav-currency-select"
-              value={selectedCurrency}
-              onChange={(e) => setSelectedCurrency(e.target.value)}
+        <nav className={`header-nav ${isMenuOpen ? 'nav-open' : ''}`}>
+          <div className={`nav-links ${isMenuOpen ? 'nav-links-open' : ''}`}>
+            {user ? (
+              <>
+                <div className="nav-primary-links">
+                  <Link 
+                    to="/inventory" 
+                    className={`nav-link ${isActive('/inventory') ? 'nav-link-active' : ''}`}
+                  >
+                    Browse
+                  </Link>
+                  <Link 
+                    to="/deck-lists" 
+                    className={`nav-link ${isActive('/deck-lists') ? 'nav-link-active' : ''}`}
+                  >
+                    Deck Lists
+                  </Link>
+                </div>
+                <div className="nav-profile-actions">
+                  <Link 
+                    to="/profile" 
+                    className={`nav-link nav-link-icon nav-profile-link ${isActive('/profile') ? 'nav-link-active' : ''}`}
+                    title="Profile"
+                  >
+                    <HiUser className="nav-icon" />
+                    {username && (
+                      <span className="nav-username">@{username}</span>
+                    )}
+                    <span className="nav-icon-text">Profile</span>
+                  </Link>
+                  <button 
+                    onClick={signOut} 
+                    className="nav-button nav-button-icon" 
+                    title="Sign Out"
+                  >
+                    <HiLogout className="nav-icon nav-icon-red" />
+                    <span className="nav-icon-text">Logout</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="nav-auth-links">
+                <Link 
+                  to="/inventory" 
+                  className={`nav-link ${isActive('/inventory') ? 'nav-link-active' : ''}`}
+                >
+                  Browse
+                </Link>
+                <Link 
+                  to="/deck-lists" 
+                  className={`nav-link ${isActive('/deck-lists') ? 'nav-link-active' : ''}`}
+                >
+                  Deck Lists
+                </Link>
+                <Link 
+                  to="/login" 
+                  className={`nav-link ${isActive('/login') ? 'nav-link-active' : ''}`}
+                >
+                  Log In
+                </Link>
+                <Link 
+                  to="/signup" 
+                  className={`nav-link nav-link-primary ${isActive('/signup') ? 'nav-link-active' : ''}`}
+                >
+                  Sign Up
+                </Link>
+              </div>
+            )}
+          </div>
+          <div className="nav-controls">
+            <button 
+              className={`nav-menu-toggle ${isMenuOpen ? 'is-open' : ''}`}
+              type="button"
+              aria-label="Toggle navigation"
+              onClick={toggleMenu}
             >
-              <option value="usd">USD</option>
-              <option value="cad">CAD</option>
-              <option value="eur">EUR</option>
-            </select>
+              <span />
+              <span />
+              <span />
+            </button>
+            <div className="nav-currency-selector">
+              <select
+                className="nav-currency-select"
+                value={selectedCurrency}
+                onChange={(e) => setSelectedCurrency(e.target.value)}
+              >
+                <option value="usd">USD</option>
+                <option value="cad">CAD</option>
+                <option value="eur">EUR</option>
+              </select>
+            </div>
           </div>
         </nav>
       </div>

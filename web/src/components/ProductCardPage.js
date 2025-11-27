@@ -693,19 +693,19 @@ const ProductCardPage = () => {
                                 <div className="pricing-grid">
                                   {currentPrice.market_price !== null && currentPrice.market_price !== undefined && (
                                     <div className="price-item">
-                                      <span className="price-label">Market Price:</span>
+                                      <span className="price-label">Market:</span>
                                       <span className="price-value">${parseFloat(currentPrice.market_price || currentPrice.marketPrice || 0).toFixed(2)}</span>
                                     </div>
                                   )}
                                   {currentPrice.low_price !== null && currentPrice.low_price !== undefined && (
                                     <div className="price-item">
-                                      <span className="price-label">Low Price:</span>
+                                      <span className="price-label">Low:</span>
                                       <span className="price-value">${parseFloat(currentPrice.low_price || currentPrice.lowPrice || 0).toFixed(2)}</span>
                                     </div>
                                   )}
                                   {currentPrice.high_price !== null && currentPrice.high_price !== undefined && (
                                     <div className="price-item">
-                                      <span className="price-label">High Price:</span>
+                                      <span className="price-label">High:</span>
                                       <span className="price-value">${parseFloat(currentPrice.high_price || currentPrice.highPrice || 0).toFixed(2)}</span>
                                     </div>
                                   )}
@@ -743,19 +743,19 @@ const ProductCardPage = () => {
                                   <div className="pricing-grid">
                                     {vendorPrice.market_price !== null && vendorPrice.market_price !== undefined && (
                                       <div className="price-item">
-                                        <span className="price-label">Market Price:</span>
+                                        <span className="price-label">Market:</span>
                                         <span className="price-value">${parseFloat(vendorPrice.market_price || vendorPrice.marketPrice || 0).toFixed(2)}</span>
                                       </div>
                                     )}
                                     {vendorPrice.low_price !== null && vendorPrice.low_price !== undefined && (
                                       <div className="price-item">
-                                        <span className="price-label">Low Price:</span>
+                                        <span className="price-label">Low:</span>
                                         <span className="price-value">${parseFloat(vendorPrice.low_price || vendorPrice.lowPrice || 0).toFixed(2)}</span>
                                       </div>
                                     )}
                                     {vendorPrice.high_price !== null && vendorPrice.high_price !== undefined && (
                                       <div className="price-item">
-                                        <span className="price-label">High Price:</span>
+                                        <span className="price-label">High:</span>
                                         <span className="price-value">${parseFloat(vendorPrice.high_price || vendorPrice.highPrice || 0).toFixed(2)}</span>
                                       </div>
                                     )}

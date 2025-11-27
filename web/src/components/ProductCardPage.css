@@ -174,12 +174,15 @@
 }
 
 .product-image-section {
+  height: 100%;
   margin-bottom: 0;
   position: relative;
+  text-align: center;
+  align-content: center;
 }
 
 .product-hero-image {
-  width: 100%;
+  /* width: 100%; */
   height: auto;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -281,6 +284,10 @@
   width: 100%;
 }
 
+.release-info {
+    padding-top: 32px;
+}
+
 .market-content-wrapper {
   display: flex;
   flex-direction: row;
@@ -294,7 +301,6 @@
 }
 
 .pricing-section {
-  flex: 0 0 400px;
   overflow-y: auto;
   padding-right: 8px;
 }
@@ -315,6 +321,23 @@
 
 .pricing-section::-webkit-scrollbar-thumb:hover {
   background: #a0aec0;
+}
+
+@media (max-width: 900px) {
+  .market-content-wrapper {
+    flex-direction: column;
+  }
+
+  .price-history-section,
+  .pricing-section {
+    width: 100%;
+    flex: unset;
+  }
+
+  .pricing-section {
+    max-height: none;
+    order: 2;
+  }
 }
 
 .pricing-content {
@@ -562,8 +585,12 @@
 }
 
 .product-card-stats-horizontal .product-card-stat-box {
-  padding-top: 16px;
+  padding-top: 20px;
   border-radius: 8px;
+}
+
+.product-card-stats-wrapper.product-card-stats-horizontal {
+    gap: 16px;
 }
 
 .product-card-stat-value {
@@ -865,9 +892,13 @@
 }
 
 @media (max-width: 768px) {
+  .product-card-traits {
+    margin-bottom: 32px;
+  }
+
   .product-hero {
+    margin-bottom: 32px;
     grid-template-columns: 1fr;
-    gap: 24px;
   }
 
   .product-title {
@@ -885,11 +916,6 @@
     grid-template-columns: 1fr;
   }
 
-  .header-content {
-    padding: 16px 20px;
-    flex-wrap: wrap;
-  }
-
   .user-menu {
     flex-direction: column;
     width: 100%;
@@ -900,6 +926,12 @@
   .nav-button {
     width: 100%;
     text-align: center;
+  }
+}
+
+@media (max-width: 386px) {
+  .product-card-stats-wrapper.product-card-stats-horizontal {
+    display: block;
   }
 }
 

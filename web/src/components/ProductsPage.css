@@ -275,13 +275,6 @@
   accent-color: #667eea;
 }
 
-.products-main {
-  padding: 0;
-  max-width: 100%;
-  margin: 0;
-  position: relative;
-}
-
 .products-page .deck-builder-layout {
   display: flex;
   gap: 0;
@@ -778,6 +771,11 @@
 
 /* Responsive styles for card-list-header */
 @media (max-width: 768px) {
+  .products-page .deck-builder-content {
+    margin-right: 0 !important;
+    padding: 16px;
+  }
+
   .card-list-header {
     padding: 16px 20px;
     margin: -16px -16px 16px -16px;
@@ -1897,21 +1895,6 @@
     padding: 16px;
   }
 
-  .header-content {
-    padding: 16px 24px;
-    flex-wrap: wrap;
-  }
-
-  .logo-link {
-    width: 100%;
-    text-align: center;
-    margin-bottom: 12px;
-  }
-
-  .header-nav {
-    width: 100%;
-  }
-
   .user-menu {
     flex-direction: column;
     width: 100%;
@@ -1933,10 +1916,6 @@
   .auth-link {
     width: 100%;
     text-align: center;
-  }
-
-  .products-main {
-    padding: 40px 24px;
   }
 
   .products-title {
