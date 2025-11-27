@@ -1806,7 +1806,7 @@ const ProductsPage = () => {
               toggleAttributeGroup={toggleAttributeGroup}
               
               // Custom render props
-              renderProductCardActions={(product, productId, productIdStr, quantity, isFavorited) => {
+              renderProductCardActions={(product, productId, productIdStr, quantity) => {
                 if (!user) return null;
                 return (
                   <div className="deck-controls">
@@ -1834,14 +1834,22 @@ const ProductsPage = () => {
                 </button>
                       )}
                     </div>
-                <button
-                      className={`favorite-button-card ${isFavorited ? 'favorited' : ''}`}
-                      onClick={(e) => handleFavoriteToggle(e, productId)}
-                      title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
-                    >
-                      {isFavorited ? '★' : '☆'}
-                </button>
               </div>
+                );
+              }}
+              renderFavoriteButton={(product, productId, productIdStr, isFavorited) => {
+                if (!user) return null;
+                return (
+                  <button
+                    className={`favorite-button-card ${isFavorited ? 'favorited' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleFavoriteToggle(e, productId);
+                    }}
+                    title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                  >
+                    {isFavorited ? '★' : '☆'}
+                  </button>
                 );
               }}
               productCardClassName={(product, quantity) => {
