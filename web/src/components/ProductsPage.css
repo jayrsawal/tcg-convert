@@ -1095,6 +1095,10 @@
 }
 
 /* Products Grid - Card Layout */
+.products-grid-wrapper {
+  width: 100%;
+}
+
 .products-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

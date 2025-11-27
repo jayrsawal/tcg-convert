@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import html2canvas from 'html2canvas';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -23,7 +24,12 @@ import DeckDeltaConfirmation from './DeckDeltaConfirmation';
 import SidebarCardList from './SidebarCardList';
 import DistributionHistograms from './DistributionHistograms';
 import { RiFileCopyFill } from 'react-icons/ri';
+import { HiDownload, HiUpload } from 'react-icons/hi';
 import './DeckBuilderPage.css';
+
+const wait = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
+const waitForNextPaint = () =>
+  new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
 const DeckBuilderPage = () => {
   const { deckListId } = useParams();
@@ -82,11 +88,16 @@ const DeckBuilderPage = () => {
   const [histogramsMinimized, setHistogramsMinimized] = useState(false);
   const [histogramsExpanded, setHistogramsExpanded] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isCapturingGrid, setIsCapturingGrid] = useState(false);
+  const [screenshotMode, setScreenshotMode] = useState(false);
+  const [useProxyImages, setUseProxyImages] = useState(false);
+  const [screenshotGridStyles, setScreenshotGridStyles] = useState({ wrapper: null, grid: null });
   // Initialize maxPercentage with user's TCG percentage preference, or default to 100
   const [maxPercentage, setMaxPercentage] = useState(() => {
     const value = selectedTCGPercentage;
     return (value !== null && value !== undefined && !isNaN(value)) ? value : 100;
   });
+  const screenshotWrapperWidth = 1400;
   const pendingNavigationRef = useRef(null);
   
   // History for undo functionality
@@ -115,6 +126,21 @@ const DeckBuilderPage = () => {
   });
   const isUpdatingDeckProductsRef = useRef(false);
   const scrollPositionRef = useRef(0);
+  const productsGridRef = useRef(null);
+  const screenshotModeRef = useRef(false);
+
+  useEffect(() => {
+    screenshotModeRef.current = screenshotMode;
+    if (typeof document === 'undefined') return;
+    if (screenshotMode) {
+      document.body.classList.add('disable-card-animations');
+    } else {
+      document.body.classList.remove('disable-card-animations');
+    }
+    return () => {
+      document.body.classList.remove('disable-card-animations');
+    };
+  }, [screenshotMode]);
   
   // Determine permissions
   const isOwner = !!(user && deckList && deckList.user_id === user.id);
@@ -1492,11 +1518,165 @@ const DeckBuilderPage = () => {
     }
   };
 
+  const waitForGridReady = async (timeout = 6000) => {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      const grid = productsGridRef.current;
+      if (grid) {
+        const cards = grid.querySelectorAll('.product-card');
+        const animatingCard = screenshotModeRef.current ? null : grid.querySelector('.product-card-new');
+        if (cards.length > 0 && !animatingCard) {
+          return grid;
+        }
+      }
+      await wait(100);
+    }
+    throw new Error('Timed out waiting for products grid to finish loading.');
+  };
+
+  const waitForImagesToLoad = async (gridElement, timeoutPerImage = 5000) => {
+    if (!gridElement) return;
+    const images = Array.from(gridElement.querySelectorAll('.product-image'))
+      .filter((img) => img.offsetParent !== null && img.style.display !== 'none');
+    const pending = images.filter(
+      (img) => !img.complete || img.naturalWidth === 0 || img.naturalHeight === 0
+    );
+    if (pending.length === 0) return;
+
+    await Promise.all(
+      pending.map(
+        (img) =>
+          new Promise((resolve) => {
+            const cleanup = () => {
+              img.removeEventListener('load', onLoad);
+              img.removeEventListener('error', onDone);
+              clearTimeout(timer);
+              resolve();
+            };
+            const onLoad = () => cleanup();
+            const onDone = () => cleanup();
+            const timer = setTimeout(cleanup, timeoutPerImage);
+            if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
+              cleanup();
+              return;
+            }
+            img.addEventListener('load', onLoad, { once: true });
+            img.addEventListener('error', onDone, { once: true });
+          })
+      )
+    );
+  };
+
   const toggleAttributeGroup = (key) => {
     setCollapsedAttributeGroups(prev => ({
       ...prev,
       [key]: !prev[key]
     }));
+  };
+
+  const getProxyImageSrc = useCallback((product) => {
+    const raw = product?.image_url || product?.imageUrl;
+    if (!raw) return raw;
+    return `/image-proxy?url=${encodeURIComponent(raw)}`;
+  }, []);
+
+  const handleDownloadGridScreenshot = async () => {
+    if (isCapturingGrid) return;
+
+    if (!deckProducts || deckProducts.length === 0) {
+      setNotification({
+        isOpen: true,
+        title: 'No Cards to Capture',
+        message: 'Add cards to the deck before capturing the products grid.',
+        type: 'error'
+      });
+      return;
+    }
+
+    setIsCapturingGrid(true);
+
+    try {
+      setUseProxyImages(true);
+      setScreenshotMode(true);
+      const cardCount = Math.max(filteredProducts.length, deckProducts.length, 1);
+      const columns = Math.max(1, Math.round(Math.sqrt(cardCount)));
+      const gap = 20;
+      setScreenshotGridStyles({
+        wrapper: {
+          padding: '32px 32px 72px',
+          backgroundColor: '#D7DFEB',
+          backgroundImage: 'var(--deck-screenshot-bg, var(--app-bg-logo))',
+          backgroundBlendMode: 'normal',
+          borderRadius: '16px',
+          margin: '0 auto',
+          width: `${screenshotWrapperWidth}px`,
+          maxWidth: `${screenshotWrapperWidth}px`,
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'bottom right',
+          backgroundSize: '45%',
+        },
+        grid: {
+          gridTemplateColumns: `repeat(auto-fit, minmax(220px, 1fr))`,
+          gap: `${gap}px`,
+          justifyContent: 'center',
+          width: '100%',
+          maxWidth: `${screenshotWrapperWidth - 64}px`,
+        }
+      });
+      if (!showInDeckOnly) {
+        setShowInDeckOnly(true);
+      }
+      await waitForNextPaint();
+      await wait(200);
+      const gridElement = await waitForGridReady();
+      await waitForImagesToLoad(gridElement);
+
+      const canvas = await html2canvas(gridElement, {
+        backgroundColor: window.getComputedStyle(document.body).backgroundColor || '#ffffff',
+        useCORS: true,
+        scale: Math.min(2, window.devicePixelRatio || 2),
+        logging: false,
+        allowTaint: true,
+      });
+
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((canvasBlob) => {
+          if (canvasBlob) {
+            resolve(canvasBlob);
+          } else {
+            reject(new Error('Unable to generate image blob'));
+          }
+        }, 'image/png');
+      });
+
+      const safeDeckName = (deckList?.name || 'deck')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'deck';
+      const fileName = `${safeDeckName}-products.png`;
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('[handleDownloadGridScreenshot] Error capturing grid:', err);
+      setNotification({
+        isOpen: true,
+        title: 'Screenshot Failed',
+        message: 'Unable to capture the products grid. Please ensure the cards are visible and try again.',
+        type: 'error'
+      });
+    } finally {
+      setUseProxyImages(false);
+      setScreenshotMode(false);
+      setScreenshotGridStyles({ wrapper: null, grid: null });
+      setIsCapturingGrid(false);
+    }
   };
 
   // Removed unused handlers - search and sort are handled inline
@@ -2014,7 +2194,15 @@ const DeckBuilderPage = () => {
                   onClick={() => setShowExportModal(true)}
                   title="Export deck list"
                 >
-                  📤
+                  <HiUpload />
+                </button>
+                <button
+                  className="sidebar-download-button"
+                  onClick={handleDownloadGridScreenshot}
+                  title="Download deck grid screenshot"
+                  disabled={isCapturingGrid || (deckProducts?.length || 0) === 0}
+                >
+                  <HiDownload />
                 </button>
               </div>
             </div>
@@ -2244,7 +2432,17 @@ const DeckBuilderPage = () => {
                     onClick={() => setShowExportModal(true)}
                     title="Export or import deck list"
                   >
-                    📤 Import/Export
+                    <HiUpload />
+                    Import
+                  </button>
+                  <button
+                    className="import-export-button-header download-grid-button"
+                    onClick={handleDownloadGridScreenshot}
+                    title="Download a screenshot of cards currently in the deck"
+                    disabled={isCapturingGrid || loading || (deckProducts?.length || 0) === 0}
+                  >
+                    <HiDownload />
+                    {isCapturingGrid ? 'Preparing...' : 'Download Grid'}
                   </button>
                 </div>
               }
@@ -2325,7 +2523,7 @@ const DeckBuilderPage = () => {
               
               // Custom render props
               renderProductCardActions={(product, productId, productIdStr, quantity, isFavorited) => {
-                if (!user && !canEdit) return null;
+                if (screenshotMode || (!user && !canEdit)) return null;
                 return (
                   <div className="deck-controls">
                     {canEdit && (
@@ -2366,6 +2564,9 @@ const DeckBuilderPage = () => {
                   </button>
                 );
               }}
+              productsGridRef={productsGridRef}
+              productsGridStyle={screenshotGridStyles.grid}
+              productsGridWrapperStyle={screenshotGridStyles.wrapper}
               productCardClassName={(product, quantity) => {
                 const productId = String(product.product_id || product.id);
                 const classes = [];
@@ -2414,6 +2615,35 @@ const DeckBuilderPage = () => {
                 
                 return badges.length > 0 ? <div className="rule-violation-badges">{badges}</div> : null;
               }}
+              getProductImageSrc={useProxyImages ? getProxyImageSrc : undefined}
+              renderWatermark={
+                screenshotMode
+                  ? () => (
+                      <>
+                        <div className="screenshot-watermark-left">
+                          <img
+                            src={`${process.env.PUBLIC_URL || ''}/logo-2.png`}
+                            alt="StrikerPack"
+                            className="screenshot-watermark-logo"
+                          />
+                          <span>{`${typeof window !== 'undefined' ? window.location.origin : ''}/deck-builder/${deckListId}`}</span>
+                        </div>
+                        <div className="screenshot-watermark-right">
+                          <span className="screenshot-watermark-deck-name">{deckList?.name || 'Untitled Deck'}</span>
+                          {(() => {
+                            const ownerUsername =
+                              deckList?.user_username ||
+                              deckList?.username ||
+                              deckList?.user?.username ||
+                              deckList?.owner_username ||
+                              user?.username;
+                            return ownerUsername ? <span className="screenshot-watermark-username">@{ownerUsername}</span> : null;
+                          })()}
+                        </div>
+                      </>
+                    )
+                  : null
+              }
             />
           </div>
         </div>

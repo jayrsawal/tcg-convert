@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { HiUpload } from 'react-icons/hi';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -1718,9 +1719,10 @@ const ProductsPage = () => {
                     <button 
                       className="import-export-button-header" 
                       onClick={() => setShowExportModal(true)}
-                      title="Import/Export inventory"
+                      title="Import inventory"
                     >
-                      📤 Import/Export
+                      <HiUpload />
+                      Import
                     </button>
                     <span className="inventory-manager-badge">Inventory Manager</span>
                   </>

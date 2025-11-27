@@ -95,6 +95,7 @@
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .duplicate-deck-button {
@@ -105,6 +106,112 @@
 
 .duplicate-deck-button svg {
   font-size: 16px;
+}
+
+.download-grid-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.download-grid-button svg {
+  font-size: 16px;
+}
+
+@media (max-width: 700px) {
+  .deck-builder-header-actions {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+
+  .deck-builder-header-actions > button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+body.disable-card-animations .deck-controls,
+body.disable-card-animations .favorite-button-card,
+body.disable-card-animations .deck-add-button,
+body.disable-card-animations .deck-remove-button {
+  display: none !important;
+}
+
+body.disable-card-animations .product-market-price {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+body.disable-card-animations .product-card {
+  animation: none !important;
+  transition: none !important;
+  opacity: 1 !important;
+}
+
+body.disable-card-animations::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--deck-screenshot-bg, var(--app-bg-logo)) no-repeat bottom right;
+  background-size: 45%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.2;
+}
+
+.screenshot-watermark {
+  margin-top: 64px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  font-size: 24px;
+  font-weight: 600;
+  color: #4a5568;
+}
+
+.screenshot-watermark-left,
+.screenshot-watermark-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.screenshot-watermark-logo {
+  height: 64px;
+  width: auto;
+  object-fit: contain;
+}
+
+.screenshot-watermark-right {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.screenshot-watermark-username {
+  font-size: 24px;
+  font-weight: 600;
+  color: #4a5568;
+  background: rgba(215, 223, 235, 0.75);
+  border-radius: 999px;
+  padding: 8px 16px;
+}
+
+.screenshot-watermark-deck-name {
+  font-size: 64px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(115, 123, 135, 0.6);
+  border-radius: 999px;
+  padding: 12px 24px;
+}
+
+body.disable-card-animations .product-card-new {
+  opacity: 1 !important;
 }
 
 .deck-name-display {
@@ -371,6 +478,30 @@
 .sidebar-export-button:hover {
   background: rgba(102, 126, 234, 0.2);
   transform: scale(1.1);
+}
+
+.sidebar-download-button {
+  background: rgba(102, 126, 234, 0.1);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+}
+
+.sidebar-download-button:hover:not(:disabled) {
+  background: rgba(102, 126, 234, 0.2);
+  transform: scale(1.1);
+}
+
+.sidebar-download-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .sidebar-toggle {

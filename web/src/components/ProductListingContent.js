@@ -72,6 +72,11 @@ const ProductListingContent = ({
   productCardClassName,
   renderProductCardBadges,
   renderFavoriteButton,
+  productsGridRef,
+  productsGridStyle,
+  productsGridWrapperStyle,
+  getProductImageSrc,
+  renderWatermark,
 }) => {
   // Local state for search input (to avoid triggering search on every keystroke)
   const [searchInputValue, setSearchInputValue] = useState(searchQuery || '');
@@ -470,12 +475,20 @@ const ProductListingContent = ({
 
       {/* Products Grid */}
       {!loading && !error && filteredProducts.length > 0 && (
-        <div className="products-grid">
+        <div 
+          className="products-grid-wrapper" 
+          ref={productsGridRef || null}
+          style={productsGridWrapperStyle || undefined}
+        >
+          <div className="products-grid" style={productsGridStyle || undefined}>
           {filteredProducts.map((product) => {
             const productId = product.product_id || product.id;
             const productIdStr = String(productId);
             const name = product.name || 'Unknown Product';
-            const imageUrl = product.image_url || product.imageUrl;
+            const rawImageUrl = product.image_url || product.imageUrl;
+            const imageUrl = typeof getProductImageSrc === 'function'
+              ? getProductImageSrc(product, productIdStr, rawImageUrl)
+              : rawImageUrl;
             const number = product.number || product.Number;
             const quantity = getQuantity ? getQuantity(productIdStr) : 0;
             const isFavorited = favorites && favorites.has(productIdStr);
@@ -562,6 +575,12 @@ const ProductListingContent = ({
               </div>
             );
           })}
+          </div>
+          {renderWatermark && (
+            <div className="screenshot-watermark">
+              {renderWatermark(filteredProducts)}
+            </div>
+          )}
         </div>
       )}
 
