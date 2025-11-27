@@ -90,9 +90,21 @@
   z-index: 100;
 }
 
-/* Deck name header now uses PageHeader component, but keep these for compatibility */
-.deck-name-header {
-  /* Styles are now in PageHeader.css */
+.deck-builder-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.duplicate-deck-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.duplicate-deck-button svg {
+  font-size: 16px;
 }
 
 .deck-name-display {
@@ -114,11 +126,6 @@
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-/* export-deck-button styles are now in PageHeader.css for consistency */
-.export-deck-button {
-  /* Styles inherited from PageHeader.css */
 }
 
 .edit-name-button {
@@ -312,6 +319,39 @@
 .over-limit-indicator {
   margin-left: 4px;
   font-size: 16px;
+}
+
+.sidebar-header-actions {
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 24px;
+}
+
+.sidebar-duplicate-button {
+  background: rgba(102, 126, 234, 0.1);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 41px;
+  height: 33px;
+}
+
+.sidebar-duplicate-button:hover:not(:disabled) {
+  background: rgba(72, 187, 120, 0.25);
+  transform: scale(1.1);
+}
+
+.sidebar-duplicate-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .sidebar-export-button {

@@ -5,7 +5,7 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { useTCGPercentage } from '../contexts/TCGPercentageContext';
 import { getFavorites, toggleFavorite } from '../lib/favorites';
 import { getUserInventory } from '../lib/inventory';
-import { fetchDeckList, updateDeckListName, updateDeckListItems, deleteDeckListItems, fetchCategoryRules } from '../lib/api';
+import { fetchDeckList, createDeckList, updateDeckListName, updateDeckListItems, deleteDeckListItems, fetchCategoryRules } from '../lib/api';
 import { fetchGroupsByCategory, fetchProductExtendedDataKeyValues, filterProducts, searchProducts, fetchProductsBulk, extractExtendedDataFromProduct, fetchCurrentPricesBulk } from '../lib/api';
 import { parseImportText, fetchProductsByCardNumbers, matchProductsToImportLines } from '../lib/importUtils';
 import { calculateDelta as calculateDeltaUtil } from '../lib/deltaUtils';
@@ -16,11 +16,13 @@ import ProductPreviewModal from './ProductPreviewModal';
 import NotificationModal from './NotificationModal';
 import ConfirmationModal from './ConfirmationModal';
 import ExportDeckModal from './ExportDeckModal';
+import DeckNamePromptModal from './DeckNamePromptModal';
 import PageHeader from './PageHeader';
 import ProductListingContent from './ProductListingContent';
 import DeckDeltaConfirmation from './DeckDeltaConfirmation';
 import SidebarCardList from './SidebarCardList';
 import DistributionHistograms from './DistributionHistograms';
+import { RiFileCopyFill } from 'react-icons/ri';
 import './DeckBuilderPage.css';
 
 const DeckBuilderPage = () => {
@@ -73,6 +75,8 @@ const DeckBuilderPage = () => {
   const [notification, setNotification] = useState({ isOpen: false, title: '', message: '', type: 'info' });
   const [confirmation, setConfirmation] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [isDuplicatingDeck, setIsDuplicatingDeck] = useState(false);
   const [showDeltaConfirmation, setShowDeltaConfirmation] = useState(false);
   const [histogramTab, setHistogramTab] = useState('cost'); // 'cost', 'level', 'cardType', 'value'
   const [histogramsMinimized, setHistogramsMinimized] = useState(false);
@@ -111,6 +115,10 @@ const DeckBuilderPage = () => {
   });
   const isUpdatingDeckProductsRef = useRef(false);
   const scrollPositionRef = useRef(0);
+  
+  // Determine permissions
+  const isOwner = !!(user && deckList && deckList.user_id === user.id);
+  const canEdit = isOwner;
 
   // Sync maxPercentage with user's TCG percentage preference
   useEffect(() => {
@@ -156,9 +164,8 @@ const DeckBuilderPage = () => {
         loadInventory();
       }
       
-      // Load products with current filters (initial load)
-      if (!loadingProductsRef.current) {
-        // Set initial filter params to prevent duplicate load
+      // Load products with current filters (initial load) only in edit mode
+      if (canEdit && !loadingProductsRef.current) {
         const initialFilterParams = JSON.stringify({
           group_id: selectedGroupId,
           filters: attributeFilters,
@@ -167,9 +174,11 @@ const DeckBuilderPage = () => {
         lastFilterParamsRef.current = initialFilterParams;
         setCurrentPage(1);
         loadProducts(1, false);
+      } else if (!canEdit) {
+        setHasMorePages(false);
       }
     }
-  }, [deckList?.category_id]); // Only depend on category_id, not entire deckList object
+  }, [deckList?.category_id, canEdit]); // Only depend on category_id and editability
 
   useEffect(() => {
     if (!deckList || !deckList.category_id) return;
@@ -184,12 +193,14 @@ const DeckBuilderPage = () => {
       sortOption: sortOption
     });
     
-    if (currentFilterParams !== lastFilterParamsRef.current && !loadingProductsRef.current) {
+    if (canEdit && currentFilterParams !== lastFilterParamsRef.current && !loadingProductsRef.current) {
       lastFilterParamsRef.current = currentFilterParams;
       setCurrentPage(1);
       loadProducts(1, false);
+    } else if (!canEdit) {
+      setHasMorePages(false);
     }
-  }, [selectedGroupId, attributeFilters, sortOption, deckList?.category_id]);
+  }, [selectedGroupId, attributeFilters, sortOption, deckList?.category_id, canEdit]);
 
   useEffect(() => {
     // Load deck products whenever deck items change (including staged changes)
@@ -351,7 +362,11 @@ const DeckBuilderPage = () => {
     
     if (shouldReset) {
       setCurrentPage(1);
-      loadProducts(1, false);
+      if (canEdit) {
+        loadProducts(1, false);
+      } else {
+        setHasMorePages(false);
+      }
     }
     // Always update the ref to track current state
     prevFilterStateRef.current = currentFilterState;
@@ -371,7 +386,7 @@ const DeckBuilderPage = () => {
         });
       });
     }
-  }, [products, deckProducts, searchQuery, showFavoritesOnly, showInDeckOnly, showOwnedOnly, favorites, inventory, deckItems, stagedDeckItems, sortOption, user, deckList]);
+  }, [products, deckProducts, searchQuery, showFavoritesOnly, showInDeckOnly, showOwnedOnly, favorites, inventory, deckItems, stagedDeckItems, sortOption, user, deckList, canEdit]);
 
   const loadDeckList = async () => {
     if (!deckListId) return;
@@ -843,6 +858,7 @@ const DeckBuilderPage = () => {
   };
 
   const loadMoreProducts = async () => {
+    if (!canEdit) return;
     if (loadingMore || !hasMorePages) return;
     const nextPage = currentPage + 1;
     await loadProducts(nextPage, true);
@@ -1114,6 +1130,83 @@ const DeckBuilderPage = () => {
         message: 'Error importing deck. Please try again.',
         type: 'error'
       });
+    }
+  };
+
+  const handleOpenDuplicateModal = () => {
+    if (!user) {
+      setNotification({
+        isOpen: true,
+        title: 'Sign In Required',
+        message: 'Log in to duplicate this deck.',
+        type: 'error'
+      });
+      return;
+    }
+    if (!deckList) {
+      setNotification({
+        isOpen: true,
+        title: 'Duplicate Unavailable',
+        message: 'Deck data is still loading. Please wait a moment.',
+        type: 'error'
+      });
+      return;
+    }
+    setShowDuplicateModal(true);
+  };
+
+  const handleConfirmDuplicateDeck = async (newDeckName) => {
+    if (!user || !deckList || !deckList.category_id) {
+      setNotification({
+        isOpen: true,
+        title: 'Duplicate Failed',
+        message: 'Unable to duplicate deck at this time.',
+        type: 'error'
+      });
+      return;
+    }
+    if (isDuplicatingDeck) return;
+
+    setIsDuplicatingDeck(true);
+    try {
+      const sourceDeckId = deckList.deck_list_id || deckList.id;
+      const fullDeck = await fetchDeckList(sourceDeckId, user.id);
+
+      if (!fullDeck) {
+        throw new Error('Deck data could not be loaded.');
+      }
+
+      const itemsToCopy = fullDeck.items || {};
+      const newDeck = await createDeckList(
+        user.id,
+        deckList.category_id,
+        newDeckName,
+        itemsToCopy
+      );
+      const newDeckId = newDeck.deck_list_id || newDeck.id;
+
+      if (newDeckId && Object.keys(itemsToCopy).length > 0) {
+        await updateDeckListItems(newDeckId, user.id, itemsToCopy);
+      }
+
+      setNotification({
+        isOpen: true,
+        title: 'Deck Duplicated',
+        message: `Deck "${newDeckName}" has been duplicated successfully.`,
+        type: 'success'
+      });
+
+      navigate(`/deck-builder/${newDeckId}`);
+    } catch (err) {
+      console.error('[handleConfirmDuplicateDeck] Error duplicating deck:', err);
+      setNotification({
+        isOpen: true,
+        title: 'Duplicate Failed',
+        message: err?.message || 'Failed to duplicate deck. Please try again.',
+        type: 'error'
+      });
+    } finally {
+      setIsDuplicatingDeck(false);
     }
   };
 
@@ -1392,7 +1485,11 @@ const DeckBuilderPage = () => {
     // Clear applied filters and refresh products
     setAttributeFilters({});
     setCurrentPage(1);
-    loadProducts(1, false);
+    if (canEdit) {
+      loadProducts(1, false);
+    } else {
+      setHasMorePages(false);
+    }
   };
 
   const toggleAttributeGroup = (key) => {
@@ -1812,10 +1909,6 @@ const DeckBuilderPage = () => {
     setValidationErrors(errors);
   }, [deckItems, stagedDeckItems, categoryRules, productExtendedData, deckProducts]);
 
-  // Check if user is the owner of the deck (for editing permissions)
-  const isOwner = user && deckList && deckList.user_id === user.id;
-  const canEdit = isOwner; // Only owner can edit
-
   if (loading && !deckList) {
     return (
       <div className="deck-builder-page">
@@ -1905,13 +1998,25 @@ const DeckBuilderPage = () => {
                   return null;
                 })()}
               </h3>
-              <button
-                className="sidebar-export-button"
-                onClick={() => setShowExportModal(true)}
-                title="Export deck list"
-              >
-                📤
-              </button>
+              <div className="sidebar-header-actions">
+                {user && (
+                  <button
+                    className="sidebar-duplicate-button"
+                    onClick={handleOpenDuplicateModal}
+                    title="Duplicate this deck"
+                    disabled={isDuplicatingDeck}
+                  >
+                    <RiFileCopyFill />
+                  </button>
+                )}
+                <button
+                  className="sidebar-export-button"
+                  onClick={() => setShowExportModal(true)}
+                  title="Export deck list"
+                >
+                  📤
+                </button>
+              </div>
             </div>
             
             {!sidebarCollapsed && (
@@ -2122,13 +2227,26 @@ const DeckBuilderPage = () => {
               showEditButton={canEdit && !editingDeckName}
               onEditClick={() => setEditingDeckName(true)}
               actions={
-                <button 
-                  className="import-export-button-header" 
-                  onClick={() => setShowExportModal(true)}
-                  title="Export deck list"
-                >
-                  📤 Import/Export
-                </button>
+                <div className="deck-builder-header-actions">
+                  {user && (
+                    <button
+                      className="import-export-button-header duplicate-deck-button"
+                      onClick={handleOpenDuplicateModal}
+                      title="Duplicate this deck"
+                      disabled={isDuplicatingDeck}
+                    >
+                      <RiFileCopyFill />
+                      {isDuplicatingDeck ? 'Duplicating...' : 'Duplicate Deck'}
+                    </button>
+                  )}
+                  <button 
+                    className="import-export-button-header" 
+                    onClick={() => setShowExportModal(true)}
+                    title="Export or import deck list"
+                  >
+                    📤 Import/Export
+                  </button>
+                </div>
               }
               badge={canEdit ? 'Deck Builder Mode' : 'View Mode'}
               maxPercentage={maxPercentage}
@@ -2167,12 +2285,12 @@ const DeckBuilderPage = () => {
               loading={loading}
               loadingGroups={loadingGroups}
               loadingAttributes={loadingAttributes}
-              loadingMore={loadingMore}
+              loadingMore={canEdit ? loadingMore : false}
               error={error}
               currentPage={currentPage}
               totalCount={totalCount}
-              hasMorePages={hasMorePages}
-              onLoadMore={loadMoreProducts}
+              hasMorePages={canEdit ? hasMorePages : false}
+              onLoadMore={canEdit ? loadMoreProducts : undefined}
               newlyAddedProductIds={newlyAddedProductIds}
               
               // User and permissions
@@ -2353,6 +2471,15 @@ const DeckBuilderPage = () => {
         onImport={handleImportDeck}
         canEdit={user && deckList && deckList.user_id === user.id}
         isImporting={isImporting}
+      />
+
+      <DeckNamePromptModal
+        isOpen={showDuplicateModal}
+        onClose={() => setShowDuplicateModal(false)}
+        onConfirm={handleConfirmDuplicateDeck}
+        title="Duplicate Deck"
+        message="Enter a name for the duplicated deck:"
+        defaultValue={deckList ? `Copy of ${deckList.name || 'Untitled Deck'}` : ''}
       />
 
       {/* Deck Delta Confirmation Modal */}
