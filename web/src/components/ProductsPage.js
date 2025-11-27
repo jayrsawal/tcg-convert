@@ -27,6 +27,7 @@ import './ProductsPage.css';
 const wait = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 const waitForNextPaint = () =>
   new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+const IMAGE_PROXY_BASE = process.env.REACT_APP_IMAGE_PROXY_URL || '/image-proxy';
 
 const ProductsPage = () => {
   const { categoryId: categoryIdParam } = useParams();
@@ -148,7 +149,7 @@ const ProductsPage = () => {
   const getProxyImageSrc = useCallback((product) => {
     const raw = product?.image_url || product?.imageUrl;
     if (!raw) return raw;
-    return `/image-proxy?url=${encodeURIComponent(raw)}`;
+    return `${IMAGE_PROXY_BASE}?url=${encodeURIComponent(raw)}`;
   }, []);
 
   const waitForGridReady = async (timeout = 6000) => {
