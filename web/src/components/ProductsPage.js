@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { HiUpload } from 'react-icons/hi';
+import html2canvas from 'html2canvas';
+import { HiDownload, HiUpload } from 'react-icons/hi';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -22,6 +23,10 @@ import SidebarCardList from './SidebarCardList';
 import DistributionHistograms from './DistributionHistograms';
 import DeckDeltaConfirmation from './DeckDeltaConfirmation';
 import './ProductsPage.css';
+
+const wait = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
+const waitForNextPaint = () =>
+  new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
 const ProductsPage = () => {
   const { categoryId: categoryIdParam } = useParams();
@@ -79,6 +84,12 @@ const ProductsPage = () => {
     return (value !== null && value !== undefined && !isNaN(value)) ? value : 100;
   });
   const [showDeltaConfirmation, setShowDeltaConfirmation] = useState(false);
+  const [isCapturingGrid, setIsCapturingGrid] = useState(false);
+  const [screenshotMode, setScreenshotMode] = useState(false);
+  const [useProxyImages, setUseProxyImages] = useState(false);
+  const [screenshotGridStyles, setScreenshotGridStyles] = useState({ wrapper: null, grid: null });
+  const productsGridWrapperRef = useRef(null);
+  const screenshotWrapperWidth = 1400;
   const [isUpdatingInventory, setIsUpdatingInventory] = useState(false);
   
   const loadingProductsRef = useRef(false);
@@ -121,6 +132,72 @@ const ProductsPage = () => {
       setFavorites(new Set());
     }
   }, [user]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (screenshotMode) {
+      document.body.classList.add('disable-card-animations');
+    } else {
+      document.body.classList.remove('disable-card-animations');
+    }
+    return () => {
+      document.body.classList.remove('disable-card-animations');
+    };
+  }, [screenshotMode]);
+
+  const getProxyImageSrc = useCallback((product) => {
+    const raw = product?.image_url || product?.imageUrl;
+    if (!raw) return raw;
+    return `/image-proxy?url=${encodeURIComponent(raw)}`;
+  }, []);
+
+  const waitForGridReady = async (timeout = 6000) => {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      const wrapper = productsGridWrapperRef.current;
+      if (wrapper) {
+        const cards = wrapper.querySelectorAll('.product-card');
+        if (cards.length > 0) {
+          return wrapper;
+        }
+      }
+      await wait(120);
+    }
+    throw new Error('Timed out waiting for products grid to finish loading.');
+  };
+
+  const waitForImagesToLoad = async (gridElement, timeoutPerImage = 5000) => {
+    if (!gridElement) return;
+    const images = Array.from(gridElement.querySelectorAll('.product-image'))
+      .filter((img) => img.offsetParent !== null && img.style.display !== 'none');
+    const pending = images.filter(
+      (img) => !img.complete || img.naturalWidth === 0 || img.naturalHeight === 0
+    );
+    if (pending.length === 0) return;
+
+    await Promise.all(
+      pending.map(
+        (img) =>
+          new Promise((resolve) => {
+            const cleanup = () => {
+              img.removeEventListener('load', onLoad);
+              img.removeEventListener('error', onDone);
+              clearTimeout(timer);
+              resolve();
+            };
+            const onLoad = () => cleanup();
+            const onDone = () => cleanup();
+            const timer = setTimeout(cleanup, timeoutPerImage);
+            if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
+              cleanup();
+              return;
+            }
+            img.addEventListener('load', onLoad, { once: true });
+            img.addEventListener('error', onDone, { once: true });
+          })
+      )
+    );
+  };
 
   const loadGroups = useCallback(async () => {
     if (!categoryId) return;
@@ -1192,6 +1269,99 @@ const ProductsPage = () => {
     }
   };
 
+  const handleDownloadGridScreenshot = async () => {
+    if (isCapturingGrid) return;
+
+    const visibleProducts = (filteredProducts.length > 0 ? filteredProducts : products) || [];
+    if (visibleProducts.length === 0) {
+      setNotification({
+        isOpen: true,
+        title: 'No Products',
+        message: 'There are no products to capture right now.',
+        type: 'error'
+      });
+      return;
+    }
+
+    setIsCapturingGrid(true);
+
+    try {
+      setUseProxyImages(true);
+      setScreenshotMode(true);
+
+      const cardCount = Math.max(visibleProducts.length, 1);
+      const gap = 20;
+      setScreenshotGridStyles({
+        wrapper: {
+          padding: '32px 32px 72px',
+          backgroundColor: '#D7DFEB',
+          backgroundImage: 'var(--deck-screenshot-bg, var(--app-bg-logo))',
+          backgroundBlendMode: 'normal',
+          borderRadius: '16px',
+          margin: '0 auto',
+          width: `${screenshotWrapperWidth}px`,
+          maxWidth: `${screenshotWrapperWidth}px`,
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'bottom right',
+          backgroundSize: '45%',
+        },
+        grid: {
+          gridTemplateColumns: `repeat(auto-fit, minmax(220px, 1fr))`,
+          gap: `${gap}px`,
+          justifyContent: 'center',
+          width: '100%',
+          maxWidth: `${screenshotWrapperWidth - 64}px`,
+        },
+      });
+
+      await waitForNextPaint();
+      await wait(200);
+      const gridElement = await waitForGridReady();
+      await waitForImagesToLoad(gridElement);
+
+      const canvas = await html2canvas(gridElement, {
+        backgroundColor: '#D7DFEB',
+        useCORS: true,
+        scale: Math.min(2, window.devicePixelRatio || 2),
+        logging: false,
+        allowTaint: true,
+      });
+
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((canvasBlob) => {
+          if (canvasBlob) {
+            resolve(canvasBlob);
+          } else {
+            reject(new Error('Unable to generate image blob'));
+          }
+        }, 'image/png');
+      });
+
+      const fileName = `inventory-grid-${Date.now()}.png`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('[handleDownloadGridScreenshot] Error capturing grid:', err);
+      setNotification({
+        isOpen: true,
+        title: 'Screenshot Failed',
+        message: 'Unable to capture the products grid. Please try again.',
+        type: 'error'
+      });
+    } finally {
+      setUseProxyImages(false);
+      setScreenshotMode(false);
+      setScreenshotGridStyles({ wrapper: null, grid: null });
+      setIsCapturingGrid(false);
+    }
+  };
+
   const convertCurrency = (usdValue) => {
     if (selectedCurrency === 'usd' || !currencyRates) {
       return usdValue;
@@ -1544,16 +1714,26 @@ const ProductsPage = () => {
               )}
             
               <div className="sidebar-header">
-              <h3>Inventory</h3>
-              {user && (
-                <button
-                  className="sidebar-export-button"
-                  onClick={() => setShowExportModal(true)}
-                  title="Import/Export inventory"
-                >
-                  📤
-                </button>
-              )}
+                <h3>Inventory</h3>
+                {user && (
+                  <div className="sidebar-header-actions">
+                    <button
+                      className="sidebar-export-button"
+                      onClick={() => setShowExportModal(true)}
+                      title="Import/Export inventory"
+                    >
+                      <HiUpload />
+                    </button>
+                    <button
+                      className="sidebar-download-button"
+                      onClick={handleDownloadGridScreenshot}
+                      title="Download inventory grid"
+                      disabled={isCapturingGrid || (filteredProducts.length === 0 && products.length === 0)}
+                    >
+                      <HiDownload />
+                    </button>
+                  </div>
+                )}
               </div>
               
               {!sidebarCollapsed && (
@@ -1724,6 +1904,15 @@ const ProductsPage = () => {
                       <HiUpload />
                       Import
                     </button>
+                    <button
+                      className="import-export-button-header download-grid-button"
+                      onClick={handleDownloadGridScreenshot}
+                      title="Download inventory grid"
+                      disabled={isCapturingGrid || (filteredProducts.length === 0 && products.length === 0)}
+                    >
+                      <HiDownload />
+                      Download Grid
+                    </button>
                     <span className="inventory-manager-badge">Inventory Manager</span>
                   </>
                 )
@@ -1809,7 +1998,7 @@ const ProductsPage = () => {
               
               // Custom render props
               renderProductCardActions={(product, productId, productIdStr, quantity) => {
-                if (!user) return null;
+                if (!user || screenshotMode) return null;
                 return (
                   <div className="deck-controls">
                     <div className="deck-buttons">
@@ -1857,6 +2046,10 @@ const ProductsPage = () => {
               productCardClassName={(product, quantity) => {
                 return quantity > 0 ? 'in-deck-card' : '';
               }}
+              productsGridRef={productsGridWrapperRef}
+              productsGridWrapperStyle={screenshotGridStyles.wrapper}
+              productsGridStyle={screenshotGridStyles.grid}
+              getProductImageSrc={useProxyImages ? getProxyImageSrc : undefined}
             />
             </div>
           </div>
