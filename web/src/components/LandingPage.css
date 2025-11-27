@@ -180,6 +180,12 @@
   padding: 40px 20px;
 }
 
+.hero-logo {
+  width: 100%;
+  height: auto;
+  max-width: 300px;
+}
+
 .hero-section {
   text-align: center;
   padding: 60px 20px;

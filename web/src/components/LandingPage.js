@@ -16,6 +16,7 @@ const LandingPage = () => {
   const [totalInventoryValue, setTotalInventoryValue] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const heroLogoUrl = `${process.env.PUBLIC_URL || ''}/strikerpack-1.png`;
 
   const loadCategories = useCallback(async () => {
     try {
@@ -171,16 +172,13 @@ const LandingPage = () => {
   };
 
   return (
-    <div className="landing-page">
+    <div className="landing-page" style={{ '--app-bg-logo': `url(${heroLogoUrl})` }}>
       <NavigationBar className="landing-header" />
 
       <main className="landing-main">
-        <div className="hero-section">
-          <h2>Welcome to TCGConvert</h2>
-          <p className="hero-subtitle">
-            Your destination for building and trading card game decks
-          </p>
-        </div>
+        {/* <div className="hero-section">
+          <img className="hero-logo" src="/strikerpack-1.png" alt="Striker Pack!" />
+        </div> */}
 
         <div className="categories-section">          
           {loading && (
