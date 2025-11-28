@@ -27,6 +27,7 @@ function App() {
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ForgotPasswordPage />} />
             <Route path="/inventory" element={<ProductsPage />} />
+            <Route path="/inventory/:username" element={<ProductsPage isViewOnly />} />
             <Route path="/categories/:categoryId/products" element={<Navigate to="/inventory" replace />} />
             <Route path="/deck-builder/:deckListId" element={<DeckBuilderPage />} />
             <Route path="/deck-lists" element={<DeckListsPage />} />

@@ -559,6 +559,8 @@ export const fetchProductCountsByCategory = async (categoryId) => {
 // Cache and request deduplication for profiles
 const profileCache = {};
 const profilePromises = {};
+const usernameProfileCache = {};
+const usernameProfilePromises = {};
 
 export const getUserInventory = async (userId) => {
   try {
@@ -616,6 +618,62 @@ export const getUserInventory = async (userId) => {
     console.error('Error fetching user inventory:', error);
     return {};
   }
+};
+
+export const fetchProfileByUsername = async (username) => {
+  if (!username) return null;
+  const normalized = username.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const cacheKey = `profile_username_${normalized}`;
+
+  if (usernameProfileCache[cacheKey] && Date.now() - usernameProfileCache[cacheKey].timestamp < 30000) {
+    return usernameProfileCache[cacheKey].data;
+  }
+
+  if (usernameProfilePromises[cacheKey]) {
+    return usernameProfilePromises[cacheKey];
+  }
+
+  const url = API_BASE_URL
+    ? `${API_BASE_URL}/profiles/?username=${encodeURIComponent(normalized)}`
+    : `/profiles/?username=${encodeURIComponent(normalized)}`;
+
+  const headers = await getAuthHeaders();
+  const fetchPromise = fetch(url, { headers })
+    .then(async (response) => {
+      if (!response.ok) {
+        if (response.status === 404) {
+          return null;
+        }
+        throw new Error(`Failed to fetch profile by username: ${response.status} ${response.statusText}`);
+      }
+      const profile = await response.json();
+      usernameProfileCache[cacheKey] = { data: profile, timestamp: Date.now() };
+      return profile;
+    })
+    .catch((error) => {
+      console.error('Error fetching profile by username:', error);
+      return null;
+    })
+    .finally(() => {
+      delete usernameProfilePromises[cacheKey];
+    });
+
+  usernameProfilePromises[cacheKey] = fetchPromise;
+  return fetchPromise;
+};
+
+export const getUserInventoryByUsername = async (username) => {
+  const profile = await fetchProfileByUsername(username);
+  if (!profile || !profile.items) {
+    return {};
+  }
+  const inventoryMap = {};
+  Object.entries(profile.items).forEach(([productId, quantity]) => {
+    inventoryMap[String(productId)] = quantity;
+  });
+  return inventoryMap;
 };
 
 /**

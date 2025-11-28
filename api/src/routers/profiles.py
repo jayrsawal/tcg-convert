@@ -28,21 +28,53 @@ class ProfileUpdate(BaseModel):
 @router.get("")
 @router.get("/")
 async def get_profile(
-    user_id: str = Query(..., description="User ID (UUID) to get profile for"),
+    user_id: Optional[str] = Query(None, description="User ID (UUID) to get profile for. Either user_id or username is required."),
+    username: Optional[str] = Query(None, description="Username to get profile for. Either user_id or username is required."),
     db: Client = Depends(get_db_client)
 ):
     """
     Get a user's profile. Public read access - no authentication required.
+    Accepts either user_id (UUID) or username to identify the user.
     Returns profile data including username, avatar_url, currency, items (inventory), favorites, tcg_percentage, and timestamps.
     Note: full_name is excluded from public responses for privacy.
     """
     try:
-        # Validate UUID format
-        try:
-            UUID(user_id)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid user_id format: {user_id}")
+        # Require at least one identifier
+        if not user_id and not username:
+            raise HTTPException(
+                status_code=400,
+                detail="Either user_id or username query parameter is required"
+            )
         
+        # If both are provided, user_id takes precedence
+        if user_id and username:
+            # Validate UUID format if user_id is provided
+            try:
+                UUID(user_id)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid user_id format: {user_id}")
+        
+        # If username is provided, look up the user_id first
+        if username and not user_id:
+            username_response = (
+                db.table("profiles")
+                .select("id")
+                .eq("username", username)
+                .execute()
+            )
+            
+            if not username_response.data or len(username_response.data) == 0:
+                raise HTTPException(status_code=404, detail=f"Profile not found for username: {username}")
+            
+            user_id = username_response.data[0].get("id")
+        elif user_id:
+            # Validate UUID format
+            try:
+                UUID(user_id)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid user_id format: {user_id}")
+        
+        # Get profile by user_id
         response = (
             db.table("profiles")
             .select("id,username,avatar_url,currency,items,favorites,total_count,tcg_percentage,created_at,updated_at")

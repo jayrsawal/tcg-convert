@@ -31,29 +31,63 @@ def calculate_total_count(items: Dict[str, int]) -> int:
 @router.get("")
 @router.get("/")
 async def get_inventory(
-    user_id: Optional[str] = Query(None, description="Filter by user_id (UUID). Public read access - no authentication required."),
+    user_id: Optional[str] = Query(None, description="Filter by user_id (UUID). Either user_id or username is required."),
+    username: Optional[str] = Query(None, description="Filter by username. Either user_id or username is required."),
     db: Client = Depends(get_db_client)
 ):
     """
     Get inventory for a user. Public read access - no authentication required.
+    Accepts either user_id (UUID) or username to identify the user.
     Returns the user's inventory with items as JSONB (product_id string -> quantity integer).
     """
     try:
-        if not user_id:
+        # Require at least one identifier
+        if not user_id and not username:
             raise HTTPException(
                 status_code=400, 
-                detail="user_id query parameter is required"
+                detail="Either user_id or username query parameter is required"
             )
         
-        # Validate UUID format
-        try:
-            UUID(user_id)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid user_id format: {user_id}")
+        # If both are provided, user_id takes precedence
+        if user_id and username:
+            # Validate UUID format if user_id is provided
+            try:
+                UUID(user_id)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid user_id format: {user_id}")
         
+        # If username is provided, look up the user_id first
+        if username and not user_id:
+            username_response = (
+                db.table("profiles")
+                .select("id")
+                .eq("username", username)
+                .execute()
+            )
+            
+            if not username_response.data or len(username_response.data) == 0:
+                # Return empty inventory structure if user not found
+                return {
+                    "user_id": None,
+                    "username": username,
+                    "items": {},
+                    "total_count": 0,
+                    "created_at": None,
+                    "updated_at": None
+                }
+            
+            user_id = username_response.data[0].get("id")
+        elif user_id:
+            # Validate UUID format
+            try:
+                UUID(user_id)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid user_id format: {user_id}")
+        
+        # Get inventory by user_id
         response = (
             db.table("profiles")
-            .select("id,items,total_count,created_at,updated_at")
+            .select("id,username,items,total_count,created_at,updated_at")
             .eq("id", user_id)
             .execute()
         )
@@ -62,6 +96,7 @@ async def get_inventory(
             # Return empty inventory structure if user has no profile
             return {
                 "user_id": user_id,
+                "username": username if username else None,
                 "items": {},
                 "total_count": 0,
                 "created_at": None,
@@ -71,6 +106,7 @@ async def get_inventory(
         profile = response.data[0]
         return {
             "user_id": profile.get("id"),
+            "username": profile.get("username"),
             "items": profile.get("items", {}),
             "total_count": profile.get("total_count", 0),
             "created_at": profile.get("created_at"),

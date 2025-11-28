@@ -7,7 +7,7 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { useTCGPercentage } from '../contexts/TCGPercentageContext';
 import { getFavorites, toggleFavorite } from '../lib/favorites';
 import { getUserInventory, bulkUpdateInventory } from '../lib/inventory';
-import { fetchGroupsByCategory, fetchProductExtendedDataKeyValues, filterProducts, searchProducts, fetchProductsBulk, extractExtendedDataFromProduct, fetchCurrentPricesBulk } from '../lib/api';
+import { fetchGroupsByCategory, fetchProductExtendedDataKeyValues, filterProducts, searchProducts, fetchProductsBulk, extractExtendedDataFromProduct, fetchCurrentPricesBulk, fetchProfileByUsername } from '../lib/api';
 import { parseImportText, fetchProductsByCardNumbers, matchProductsToImportLines } from '../lib/importUtils';
 import { calculateDelta as calculateDeltaUtil } from '../lib/deltaUtils';
 import { applyImportAdditive, applyRemoval, getMergedItems } from '../lib/stagingUtils';
@@ -29,8 +29,8 @@ const waitForNextPaint = () =>
   new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 const IMAGE_PROXY_BASE = process.env.REACT_APP_IMAGE_PROXY_URL || '/image-proxy';
 
-const ProductsPage = () => {
-  const { categoryId: categoryIdParam } = useParams();
+const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
+  const { categoryId: categoryIdParam, username: routeUsername } = useParams();
   // Use categoryId from params if available, otherwise default to 86 for /inventory route
   const categoryId = categoryIdParam || '86';
   const { user } = useAuth();
@@ -79,6 +79,10 @@ const ProductsPage = () => {
   const [histogramsMinimized, setHistogramsMinimized] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [viewInventory, setViewInventory] = useState({});
+  const [viewProfile, setViewProfile] = useState(null);
+  const [viewInventoryLoading, setViewInventoryLoading] = useState(false);
+  const [viewInventoryError, setViewInventoryError] = useState(null);
   // Initialize maxPercentage with user's TCG percentage preference, or default to 100
   const [maxPercentage, setMaxPercentage] = useState(() => {
     const value = selectedTCGPercentage;
@@ -132,10 +136,29 @@ const ProductsPage = () => {
   const prevFilterStateRef = useRef({});
   const scrollPositionRef = useRef(0);
 
+  const isViewingUsername = Boolean(routeUsername);
+  const viewMode = propIsViewOnly || isViewingUsername;
+  const viewedUsername = isViewingUsername ? routeUsername : null;
+  const canEditInventory = !!user && !viewMode;
+  const activeInventory = viewMode ? viewInventory : inventory;
+  const activeStagedInventory = viewMode ? {} : stagedInventory;
+
+  const getInventoryQuantity = (productId) => {
+    const productIdStr = String(productId);
+    if (activeStagedInventory[productIdStr] !== undefined) {
+      return activeStagedInventory[productIdStr];
+    }
+    return activeInventory[productIdStr] || 0;
+  };
+
+  const displayUsername = viewProfile?.username || viewedUsername || '';
+  const inventoryTitle = viewMode
+    ? `${displayUsername ? `@${displayUsername}` : 'Inventory'}'s Inventory`
+    : 'Inventory';
+
   // Define functions with useCallback to avoid dependency issues
   const loadInventory = useCallback(async () => {
-    if (!user || loadingInventoryRef.current) {
-      console.log('loadInventory: Skipping - user:', user, 'loading:', loadingInventoryRef.current);
+    if (!user || viewMode || loadingInventoryRef.current) {
       return;
     }
     
@@ -151,7 +174,7 @@ const ProductsPage = () => {
     } finally {
       loadingInventoryRef.current = false;
     }
-  }, [user]);
+  }, [user, viewMode]);
 
   const loadFavorites = useCallback(async () => {
     if (!user) return;
@@ -357,6 +380,7 @@ const ProductsPage = () => {
   }, [categoryId, categoryAttributesCache]);
 
   const loadProducts = useCallback(async (page = 1, append = false) => {
+    if (viewMode) return;
     if (!categoryId) return;
     if (loadingProductsRef.current && !append) return; // Allow loading more pages
 
@@ -639,15 +663,15 @@ const ProductsPage = () => {
         setLoadingMore(false);
       }
     }
-  }, [categoryId, selectedGroupId, attributeFilters, sortOption, showFavoritesOnly, showOwnedOnly, favorites, inventory, searchQuery]);
+  }, [viewMode, categoryId, selectedGroupId, attributeFilters, sortOption, showFavoritesOnly, showOwnedOnly, favorites, inventory, searchQuery]);
 
   const loadMoreProducts = useCallback(async () => {
-    if (loadingMore || !hasMorePages) {
+    if (viewMode || loadingMore || !hasMorePages) {
       return;
     }
     const nextPage = currentPage + 1;
     await loadProducts(nextPage, true);
-  }, [loadingMore, hasMorePages, currentPage, loadProducts]);
+  }, [viewMode, loadingMore, hasMorePages, currentPage, loadProducts]);
 
   // Helper function to merge products into the products map (single source of truth)
   const mergeProductsIntoMap = useCallback((productsToMerge) => {
@@ -666,8 +690,22 @@ const ProductsPage = () => {
     });
   }, []);
 
+  const loadProductExtendedData = useCallback((products = []) => {
+    const extendedDataMap = {};
+    
+    products.forEach(product => {
+      const productId = String(product.product_id || product.id);
+      const extendedData = extractExtendedDataFromProduct(product);
+      if (Array.isArray(extendedData) && extendedData.length > 0) {
+        extendedDataMap[productId] = extendedData;
+      }
+    });
+    
+    setProductExtendedData(prev => ({ ...prev, ...extendedDataMap }));
+  }, []);
+
   const loadAllProductsForSidebar = useCallback(async () => {
-    if (!categoryId) return;
+    if (!categoryId || viewMode) return;
     if (loadingAllProductsRef.current) return;
 
     try {
@@ -703,7 +741,7 @@ const ProductsPage = () => {
     } finally {
       loadingAllProductsRef.current = false;
     }
-  }, [categoryId, mergeProductsIntoMap, sortOption]);
+  }, [categoryId, viewMode, mergeProductsIntoMap, sortOption, loadProductExtendedData]);
 
   const loadPricesForInventoryProducts = useCallback(async () => {
     const allProductsArray = Object.values(productsMap);
@@ -754,10 +792,10 @@ const ProductsPage = () => {
     }
 
     // Owned filter
-    if (showOwnedOnly) {
+    if (showOwnedOnly && !viewMode) {
       filtered = filtered.filter(product => {
         const productId = String(product.product_id || product.id);
-        return (inventory[productId] || 0) > 0;
+        return getInventoryQuantity(productId) > 0;
       });
     }
 
@@ -840,11 +878,10 @@ const ProductsPage = () => {
       loadAttributes(),
       loadAllProductsForSidebar()
     ]);
-    // Trigger initial load - sentinel will handle subsequent loads
-    if (products.length === 0 && hasMorePages) {
+    if (!viewMode && products.length === 0 && hasMorePages) {
       loadProducts(1, false);
     }
-  }, [categoryId, loadGroups, loadAttributes, loadAllProductsForSidebar, products.length, hasMorePages, loadProducts]);
+  }, [categoryId, viewMode, loadGroups, loadAttributes, loadAllProductsForSidebar, products.length, hasMorePages, loadProducts]);
 
   // Sync maxPercentage with user's TCG percentage preference
   useEffect(() => {
@@ -855,6 +892,13 @@ const ProductsPage = () => {
     }
   }, [selectedTCGPercentage]);
 
+useEffect(() => {
+  if (viewMode) {
+    setShowOwnedOnly(false);
+    setShowFavoritesOnly(false);
+  }
+}, [viewMode]);
+
   useEffect(() => {
     if (categoryId && categoryId !== lastCategoryIdRef.current) {
       lastCategoryIdRef.current = categoryId;
@@ -863,11 +907,137 @@ const ProductsPage = () => {
   }, [categoryId, loadData]);
 
   useEffect(() => {
-    if (user) {
+    if (user && !viewMode) {
       loadInventory();
       loadFavorites();
     }
-  }, [user, loadInventory, loadFavorites]);
+  }, [user, viewMode, loadInventory, loadFavorites]);
+
+  useEffect(() => {
+    if (!viewMode || !viewedUsername) {
+      setViewInventory({});
+      setViewProfile(null);
+      setViewInventoryError(null);
+      return;
+    }
+
+    let isMounted = true;
+    const loadViewInventory = async () => {
+      setViewInventoryLoading(true);
+      setViewInventoryError(null);
+      try {
+        const profile = await fetchProfileByUsername(viewedUsername);
+        if (!isMounted) return;
+        setViewProfile(profile);
+        if (profile?.items) {
+          const mapped = {};
+          Object.entries(profile.items).forEach(([productId, quantity]) => {
+            mapped[String(productId)] = quantity;
+          });
+          setViewInventory(mapped);
+        } else {
+          setViewInventory({});
+        }
+      } catch (err) {
+        console.error('Error loading view inventory:', err);
+        if (isMounted) {
+          setViewInventory({});
+          setViewProfile(null);
+          setViewInventoryError('Unable to load inventory for this user.');
+        }
+      } finally {
+        if (isMounted) {
+          setViewInventoryLoading(false);
+        }
+      }
+    };
+
+    loadViewInventory();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [viewMode, viewedUsername]);
+
+  useEffect(() => {
+    if (!viewMode) return;
+    if (viewInventoryLoading) {
+      setLoading(true);
+      return;
+    }
+
+    const productIds = Object.entries(viewInventory)
+      .filter(([, quantity]) => quantity > 0)
+      .map(([productId]) => parseInt(productId, 10))
+      .filter((id) => !Number.isNaN(id));
+
+    if (productIds.length === 0) {
+      setProducts([]);
+      setFilteredProducts([]);
+      setHasMorePages(false);
+      setLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    const loadViewProducts = async () => {
+      try {
+        setLoading(true);
+        const productsData = await fetchProductsBulk(productIds);
+        if (!isMounted) return;
+        setProducts(productsData);
+        setFilteredProducts(productsData);
+        mergeProductsIntoMap(productsData);
+        loadProductExtendedData(productsData);
+        setHasMorePages(false);
+        setTotalCount(productsData.length);
+        
+        // Load prices for view mode products
+        if (productsData.length > 0) {
+          const productIdsForPrices = productsData
+            .map(p => p.product_id || p.id)
+            .filter(id => id !== undefined && id !== null);
+          
+          if (productIdsForPrices.length > 0) {
+            try {
+              // Batch price requests if we have many products (API might have limits)
+              const BATCH_SIZE = 500;
+              const pricePromises = [];
+              for (let i = 0; i < productIdsForPrices.length; i += BATCH_SIZE) {
+                const batch = productIdsForPrices.slice(i, i + BATCH_SIZE);
+                pricePromises.push(fetchCurrentPricesBulk(batch));
+              }
+              const priceResults = await Promise.all(pricePromises);
+              // Merge all price results
+              const allPrices = {};
+              priceResults.forEach(prices => {
+                Object.assign(allPrices, prices);
+              });
+              setProductPrices(allPrices);
+            } catch (err) {
+              console.error('Error loading prices for view mode:', err);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading view inventory products:', error);
+        if (isMounted) {
+          setProducts([]);
+          setFilteredProducts([]);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadViewProducts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [viewMode, viewInventory, viewInventoryLoading, mergeProductsIntoMap, loadProductExtendedData]);
 
   useEffect(() => {
     if (categoryId) {
@@ -898,21 +1068,6 @@ const ProductsPage = () => {
       loadPricesForInventoryProducts();
     }
   }, [productsMap, loadPricesForInventoryProducts]);
-
-
-  const loadProductExtendedData = (products) => {
-    const extendedDataMap = {};
-    
-    products.forEach(product => {
-      const productId = String(product.product_id || product.id);
-      const extendedData = extractExtendedDataFromProduct(product);
-      if (Array.isArray(extendedData) && extendedData.length > 0) {
-        extendedDataMap[productId] = extendedData;
-      }
-    });
-    
-    setProductExtendedData(prev => ({ ...prev, ...extendedDataMap }));
-  };
 
   const handleAttributeFilter = (key, value) => {
     // Update pending filters instead of applying immediately
@@ -994,7 +1149,7 @@ const ProductsPage = () => {
   };
 
   const handleInventoryChange = (productId, delta) => {
-    if (!user) return;
+    if (!canEditInventory || !user) return;
     
     const productIdStr = String(productId);
     setStagedInventory(prev => {
@@ -1067,7 +1222,7 @@ const ProductsPage = () => {
 
   // Show delta confirmation before applying
   const handleApplyInventory = () => {
-    if (!user || Object.keys(stagedInventory).length === 0) return;
+    if (!canEditInventory || !user || Object.keys(stagedInventory).length === 0) return;
     
     // Calculate delta and show confirmation
     const { addedItems, updatedItems, removedItems } = calculateInventoryDelta();
@@ -1094,6 +1249,7 @@ const ProductsPage = () => {
   };
 
   const handleDiscardInventory = () => {
+    if (!canEditInventory) return;
     setConfirmation({
       isOpen: true,
       title: 'Discard Changes',
@@ -1106,7 +1262,7 @@ const ProductsPage = () => {
   };
 
   const handleImportInventory = async (importText) => {
-    if (!user) {
+    if (!canEditInventory || !user) {
       setNotification({
         isOpen: true,
         title: 'Import Failed',
@@ -1194,7 +1350,7 @@ const ProductsPage = () => {
   };
 
   const handleRemoveInventory = async (removeText) => {
-    if (!user) {
+    if (!canEditInventory || !user) {
       setNotification({
         isOpen: true,
         title: 'Remove Failed',
@@ -1605,28 +1761,19 @@ const ProductsPage = () => {
   const getInventoryStats = () => {
     const allProductsArray = Object.values(productsMap);
     const inventoryProducts = allProductsArray.filter(product => {
-        const productId = String(product.product_id || product.id);
-        const quantity = stagedInventory[productId] !== undefined 
-          ? stagedInventory[productId] 
-          : (inventory[productId] || 0);
-      return quantity > 0;
+      const productId = String(product.product_id || product.id);
+      return getInventoryQuantity(productId) > 0;
     });
 
     const totalCards = inventoryProducts.reduce((sum, product) => {
       const productId = String(product.product_id || product.id);
-      const quantity = stagedInventory[productId] !== undefined 
-        ? stagedInventory[productId] 
-        : (inventory[productId] || 0);
-      return sum + quantity;
+      return sum + getInventoryQuantity(productId);
     }, 0);
 
     let totalValue = 0;
     inventoryProducts.forEach(product => {
       const productId = String(product.product_id || product.id);
-      const quantity = stagedInventory[productId] !== undefined 
-        ? stagedInventory[productId] 
-        : (inventory[productId] || 0);
-      
+      const quantity = getInventoryQuantity(productId);
       if (quantity > 0) {
         const price = inventoryProductPrices[parseInt(productId, 10)];
         const marketPrice = price?.market_price || price?.marketPrice;
@@ -1647,10 +1794,7 @@ const ProductsPage = () => {
     const allProductsArray = Object.values(productsMap);
     const inventoryProducts = allProductsArray.filter(product => {
       const productId = String(product.product_id || product.id);
-      const quantity = stagedInventory[productId] !== undefined 
-        ? stagedInventory[productId] 
-        : (inventory[productId] || 0);
-      return quantity > 0;
+      return getInventoryQuantity(productId) > 0;
     });
 
     if (histogramTab === 'cardType') {
@@ -1659,9 +1803,7 @@ const ProductsPage = () => {
       
       inventoryProducts.forEach(product => {
         const productId = String(product.product_id || product.id);
-        const quantity = stagedInventory[productId] !== undefined 
-          ? stagedInventory[productId] 
-          : (inventory[productId] || 0);
+        const quantity = getInventoryQuantity(productId);
         
         if (quantity > 0) {
           const attrs = getProductAttributes(productId);
@@ -1703,10 +1845,10 @@ const ProductsPage = () => {
     return null;
   };
 
-  const hasStagedChanges = Object.keys(stagedInventory).length > 0;
+  const hasStagedChanges = !viewMode && Object.keys(stagedInventory).length > 0;
   const stats = getInventoryStats();
 
-  if (loading && products.length === 0) {
+  if ((loading || (viewMode && viewInventoryLoading)) && products.length === 0) {
     return (
       <div className="products-page">
         <div className="loading-state">
@@ -1756,9 +1898,9 @@ const ProductsPage = () => {
               )}
             
               <div className="sidebar-header">
-                <h3>Inventory</h3>
-                {user && (
-                  <div className="sidebar-header-actions">
+                <h3>{inventoryTitle}</h3>
+                <div className="sidebar-header-actions">
+                  {canEditInventory && (
                     <button
                       className="sidebar-export-button"
                       onClick={() => setShowExportModal(true)}
@@ -1766,16 +1908,16 @@ const ProductsPage = () => {
                     >
                       <HiUpload />
                     </button>
-                    <button
-                      className="sidebar-download-button"
-                      onClick={handleDownloadGridScreenshot}
-                      title="Download inventory grid"
-                      disabled={isCapturingGrid || (filteredProducts.length === 0 && products.length === 0)}
-                    >
-                      <HiDownload />
-                    </button>
-                  </div>
-                )}
+                  )}
+                  <button
+                    className="sidebar-download-button"
+                    onClick={handleDownloadGridScreenshot}
+                    title="Download inventory grid"
+                    disabled={isCapturingGrid || (filteredProducts.length === 0 && products.length === 0)}
+                  >
+                    <HiDownload />
+                  </button>
+                </div>
               </div>
               
               {!sidebarCollapsed && (
@@ -1785,8 +1927,8 @@ const ProductsPage = () => {
                       const allProductsArray = Object.values(productsMap);
                       const inventoryItems = buildSidebarItems(
                         allProductsArray,
-                        inventory,
-                        stagedInventory,
+                        viewMode ? viewInventory : inventory,
+                        viewMode ? {} : stagedInventory,
                         null,
                         'name'
                       );
@@ -1799,15 +1941,15 @@ const ProductsPage = () => {
                           productPrices={inventoryProductPrices}
                           formatCurrency={formatCurrency}
                           maxPercentage={maxPercentage}
-                          onAddClick={user ? (e, productId) => {
+                          onAddClick={canEditInventory ? (e, productId) => {
                             e.stopPropagation();
                             handleInventoryChange(productId, 1);
                           } : null}
-                          onRemoveClick={user ? (e, productId) => {
+                          onRemoveClick={canEditInventory ? (e, productId) => {
                             e.stopPropagation();
                             handleInventoryChange(productId, -1);
                           } : null}
-                          canEdit={!!user}
+                          canEdit={canEditInventory}
                           emptyMessage="No items in inventory yet"
                         />
                                     );
@@ -1821,17 +1963,13 @@ const ProductsPage = () => {
                   const allProductsArray = Object.values(productsMap);
                   const inventoryProducts = allProductsArray.filter(product => {
                     const productId = String(product.product_id || product.id);
-                    const quantity = stagedInventory[productId] !== undefined 
-                      ? stagedInventory[productId] 
-                      : (inventory[productId] || 0);
+                    const quantity = getInventoryQuantity(productId);
                     return quantity > 0;
                   });
 
                   inventoryProducts.forEach(product => {
                     const productId = String(product.product_id || product.id);
-                    const quantity = stagedInventory[productId] !== undefined 
-                      ? stagedInventory[productId] 
-                      : (inventory[productId] || 0);
+                    const quantity = getInventoryQuantity(productId);
                     
                     if (quantity > 0) {
                       const attrs = getProductAttributes(productId, product);
@@ -1906,7 +2044,7 @@ const ProductsPage = () => {
                                   })()}
 
                 {/* Action buttons */}
-                {user && hasStagedChanges && (
+                {canEditInventory && hasStagedChanges && (
                   <div className="sidebar-actions">
                     {!isUpdatingInventory && (
                     <button
@@ -1934,10 +2072,10 @@ const ProductsPage = () => {
           <div className="deck-builder-content">
             {/* Card List Header */}
             <PageHeader
-              title="Card List"
+              title={inventoryTitle}
               actions={
-                user && (
-                  <>
+                <>
+                  {canEditInventory && (
                     <button 
                       className="import-export-button-header" 
                       onClick={() => setShowExportModal(true)}
@@ -1946,23 +2084,31 @@ const ProductsPage = () => {
                       <HiUpload />
                       Import
                     </button>
-                    <button
-                      className="import-export-button-header download-grid-button"
-                      onClick={handleDownloadGridScreenshot}
-                      title="Download inventory grid"
-                      disabled={isCapturingGrid || (filteredProducts.length === 0 && products.length === 0)}
-                    >
-                      <HiDownload />
-                      Download Grid
-                    </button>
+                  )}
+                  <button
+                    className="import-export-button-header download-grid-button"
+                    onClick={handleDownloadGridScreenshot}
+                    title="Download inventory grid"
+                    disabled={isCapturingGrid || (filteredProducts.length === 0 && products.length === 0)}
+                  >
+                    <HiDownload />
+                    Download Grid
+                  </button>
+                  {canEditInventory && (
                     <span className="inventory-manager-badge">Inventory Manager</span>
-                  </>
-                )
+                  )}
+                </>
               }
               maxPercentage={maxPercentage}
               setMaxPercentage={setMaxPercentage}
               className="card-list-header"
             />
+
+            {viewMode && viewInventoryError && (
+              <div className="error-state">
+                <p className="error-message">⚠️ {viewInventoryError}</p>
+              </div>
+            )}
             <ProductListingContent
               // State props
               searchQuery={searchQuery}
@@ -2007,11 +2153,7 @@ const ProductsPage = () => {
               canEdit={false}
               
               // Product rendering props
-              getQuantity={(productIdStr) => {
-                return stagedInventory[productIdStr] !== undefined 
-                  ? stagedInventory[productIdStr] 
-                  : (inventory[productIdStr] || 0);
-              }}
+              getQuantity={(productIdStr) => getInventoryQuantity(productIdStr)}
               getRarity={getRarity}
               formatCurrency={formatCurrency}
               productPrices={productPrices}
@@ -2024,11 +2166,11 @@ const ProductsPage = () => {
                 setIsPreviewOpen(true);
               }}
               onFavoriteToggle={handleFavoriteToggle}
-              onAddToDeck={user ? (e, productId) => {
+              onAddToDeck={canEditInventory ? (e, productId) => {
                 e.stopPropagation();
                 handleInventoryChange(productId, 1);
               } : undefined}
-              onRemoveFromDeck={user ? (e, productId) => {
+              onRemoveFromDeck={canEditInventory ? (e, productId) => {
                 e.stopPropagation();
                 handleInventoryChange(productId, -1);
               } : undefined}
@@ -2040,7 +2182,7 @@ const ProductsPage = () => {
               
               // Custom render props
               renderProductCardActions={(product, productId, productIdStr, quantity) => {
-                if (!user || screenshotMode) return null;
+                if (!canEditInventory || !user || screenshotMode) return null;
                 return (
                   <div className="deck-controls">
                     <div className="deck-buttons">
@@ -2092,6 +2234,7 @@ const ProductsPage = () => {
               productsGridWrapperStyle={screenshotGridStyles.wrapper}
               productsGridStyle={screenshotGridStyles.grid}
               getProductImageSrc={useProxyImages ? getProxyImageSrc : undefined}
+              showOwnedToggle={canEditInventory}
             />
             </div>
           </div>

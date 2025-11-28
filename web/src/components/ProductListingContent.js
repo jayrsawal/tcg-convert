@@ -77,6 +77,7 @@ const ProductListingContent = ({
   productsGridWrapperStyle,
   getProductImageSrc,
   renderWatermark,
+  showOwnedToggle = true,
 }) => {
   // Local state for search input (to avoid triggering search on every keystroke)
   const [searchInputValue, setSearchInputValue] = useState(searchQuery || '');
@@ -241,15 +242,17 @@ const ProductListingContent = ({
                 />
                 <span>Favorites</span>
               </label>
-              <label className="favorites-filter-label-compact">
-                <input
-                  type="checkbox"
-                  checked={showOwnedOnly}
-                  onChange={(e) => setShowOwnedOnly(e.target.checked)}
-                  className="favorites-checkbox"
-                />
-                <span>Owned</span>
-              </label>
+              {showOwnedToggle && (
+                <label className="favorites-filter-label-compact">
+                  <input
+                    type="checkbox"
+                    checked={showOwnedOnly}
+                    onChange={(e) => setShowOwnedOnly(e.target.checked)}
+                    className="favorites-checkbox"
+                  />
+                  <span>Owned</span>
+                </label>
+              )}
               {/* Only show "Show In Deck Only" filter in edit mode */}
               {canEdit && showInDeckOnly !== undefined && (
                 <label className="favorites-filter-label-compact">
