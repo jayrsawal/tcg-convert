@@ -2224,7 +2224,7 @@ const DeckBuilderPage = () => {
 
   if (loading && !deckList) {
     return (
-      <div className="deck-builder-page">
+      <div className={`deck-builder-page ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <div className="loading-state">
           <div className="spinner"></div>
           <p>Loading deck...</p>
@@ -2235,7 +2235,7 @@ const DeckBuilderPage = () => {
 
   if (error || !deckList) {
     return (
-      <div className="deck-builder-page">
+      <div className={`deck-builder-page ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <div className="error-state">
           <p className="error-message">⚠️ {error || 'Deck not found'}</p>
           <button onClick={() => navigate('/deck-lists')} className="retry-button">
@@ -2247,7 +2247,7 @@ const DeckBuilderPage = () => {
   }
 
   return (
-    <div className="deck-builder-page">
+    <div className={`deck-builder-page ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <NavigationBar className="deck-builder-header" />
 
       <main className="deck-builder-main">

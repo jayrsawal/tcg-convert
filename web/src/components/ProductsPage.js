@@ -1926,7 +1926,7 @@ useEffect(() => {
 
   if ((loading || (viewMode && viewInventoryLoading)) && products.length === 0) {
     return (
-      <div className="products-page">
+      <div className={`products-page ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <div className="loading-state">
           <div className="spinner"></div>
           <p>Loading products...</p>
@@ -1936,7 +1936,7 @@ useEffect(() => {
   }
 
   return (
-    <div className="products-page">
+    <div className={`products-page ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <NavigationBar className="products-header" />
 
       <main className="products-main">
@@ -2150,7 +2150,7 @@ useEffect(() => {
             <PageHeader
               title={inventoryTitle}
               actions={
-                <>
+                <div className="deck-builder-header-actions">
                   {canEditInventory && (
                     <button 
                       className="import-export-button-header" 
@@ -2168,13 +2168,11 @@ useEffect(() => {
                     disabled={isCapturingGrid || (filteredProducts.length === 0 && products.length === 0)}
                   >
                     <HiDownload />
-                    Download Grid
+                    Screenshot
                   </button>
-                  {canEditInventory && (
-                    <span className="inventory-manager-badge">Inventory Manager</span>
-                  )}
-                </>
+                </div>
               }
+              badge={canEditInventory ? 'Inventory Manager' : 'View Mode'}
               maxPercentage={maxPercentage}
               setMaxPercentage={setMaxPercentage}
               className="card-list-header"
