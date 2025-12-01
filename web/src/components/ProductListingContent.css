@@ -29,6 +29,10 @@
 }
 
 @media (max-width: 768px) {
+    .page-header-display {
+        flex-direction: column;
+    }
+
     /* Show toggle button on mobile */
     .filter-container-toggle {
         display: flex;
@@ -76,6 +80,16 @@
     }
 
     .product-filter .control-label, .refresh-control .control-label {
+        display: none;
+    }
+}
+
+@media (max-width: 420px) {
+    .deck-builder-header-actions span {
+        display: none;
+    }
+
+    .page-header-badge {
         display: none;
     }
 }

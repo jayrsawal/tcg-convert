@@ -40,10 +40,43 @@ const NavigationBar = ({ className = '' }) => {
     setIsMenuOpen(false);
   }, [location.pathname]);
 
+  // Measure and update navbar height for sidebar positioning
+  useEffect(() => {
+    const navBar = document.querySelector('.navigation-bar');
+    if (!navBar) return;
+
+    const updateNavHeight = () => {
+      const height = navBar.getBoundingClientRect().height;
+      document.documentElement.style.setProperty('--nav-actual-height', `${height}px`);
+    };
+
+    // Initial measurement
+    updateNavHeight();
+    
+    // Use ResizeObserver to track navbar height changes
+    const resizeObserver = new ResizeObserver(() => {
+      updateNavHeight();
+    });
+    
+    resizeObserver.observe(navBar);
+    
+    // Also update on window resize (for viewport changes)
+    window.addEventListener('resize', updateNavHeight);
+    
+    // Update when menu state changes (with a small delay to allow DOM to update)
+    const timeoutId = setTimeout(updateNavHeight, 50);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateNavHeight);
+      clearTimeout(timeoutId);
+    };
+  }, [isMenuOpen]);
+
   const toggleMenu = () => setIsMenuOpen((prev) => !prev);
 
   return (
-    <header className={`navigation-bar ${className}`}>
+    <header className={`navigation-bar ${className} ${isMenuOpen ? 'menu-open' : ''}`}>
       <div className="header-content">
         <Link to="/" className="logo-link" aria-label="StrikerPack Home">
           <img src="/logo-2-small.png" alt="StrikerPack" className="logo-image" />

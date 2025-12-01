@@ -1,20 +1,25 @@
+:root {
+  --nav-height: clamp(70px, min(10vh, 12vw), 115px);
+}
+
 .navigation-bar {
   background: white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   position: sticky;
   top: 0;
   z-index: 2000;
-  min-height: 115px;
+  min-height: var(--nav-height);
   width: 100%;
 }
 
 .header-content {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px 40px;
+  padding: clamp(10px, 2vh, 20px) clamp(20px, 4vw, 40px);
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: clamp(12px, 2vw, 20px);
+  min-height: var(--nav-height);
 }
 
 .logo-link {
@@ -23,7 +28,7 @@
 }
 
 .logo-image {
-  height: 75px;
+  height: clamp(50px, min(8vh, 9vw), 75px);
   width: auto;
   display: block;
 }
@@ -264,10 +269,18 @@
 
 /* Responsive styles */
 @media (max-width: 900px) {
+  :root {
+    --nav-height: clamp(60px, min(8vh, 10vw), 100px);
+  }
+
   .header-content {
-    padding: 16px 20px;
+    padding: clamp(8px, 1.5vh, 12px) clamp(16px, 3vw, 20px);
     align-items: flex-start;
-    gap: 16px;
+    gap: clamp(10px, 1.5vw, 12px);
+  }
+
+  .logo-image {
+    height: clamp(40px, min(6vh, 7vw), 65px);
   }
 
   .nav-menu-toggle {
@@ -278,7 +291,7 @@
     width: 100%;
     flex-direction: column;
     align-items: stretch;
-    gap: 16px;
+    gap: 0;
   }
 
   .nav-controls {
@@ -286,13 +299,14 @@
     justify-content: flex-end;
     margin-left: 0;
     gap: 12px;
+    order: -1; /* Move controls to top */
+    /* padding-bottom: 12px; */
   }
 
   .nav-currency-selector {
     border-left: none;
     padding-left: 0;
-    border-top: 1px solid #e2e8f0;
-    padding-top: 8px;
+    padding-top: 0;
   }
 
   .nav-links {
@@ -300,11 +314,27 @@
     display: none;
     flex-direction: column;
     gap: 16px;
+    background: white;
+    padding: 16px 0;
+    margin-top: 0;
+    border-top: 1px solid #e2e8f0;
+    order: 1; /* Move links below controls */
+    position: relative;
+    z-index: 1;
   }
 
   .header-nav.nav-open .nav-links,
   .nav-links-open {
     display: flex;
+  }
+
+  /* Expand navigation bar when menu is open */
+  .navigation-bar.menu-open {
+    min-height: auto;
+  }
+
+  .navigation-bar.menu-open .header-content {
+    min-height: auto;
   }
 
   .nav-primary-links,
@@ -334,6 +364,19 @@
 }
 
 @media (max-width: 600px) {
+  :root {
+    --nav-height: clamp(55px, min(7vh, 9vw), 85px);
+  }
+
+  .header-content {
+    padding: clamp(6px, 1.2vh, 10px) clamp(12px, 2.5vw, 16px);
+    gap: clamp(8px, 1.2vw, 10px);
+  }
+
+  .logo-image {
+    height: clamp(35px, min(5vh, 6vw), 55px);
+  }
+
   .nav-profile-actions {
     gap: 8px;
     flex-wrap: wrap;
@@ -342,6 +385,49 @@
   .nav-profile-actions .nav-profile-link,
   .nav-profile-actions .nav-button {
     flex: 1 1 48%;
+  }
+}
+
+/* Viewport height responsive adjustments */
+@media (max-height: 600px) {
+  :root {
+    --nav-height: clamp(60px, 10vh, 90px);
+  }
+
+  .header-content {
+    padding: clamp(8px, 1.5vh, 16px) clamp(20px, 4vw, 40px);
+  }
+
+  .logo-image {
+    height: clamp(45px, min(7vh, 8vw), 65px);
+  }
+}
+
+@media (max-height: 500px) {
+  :root {
+    --nav-height: clamp(55px, 9vh, 80px);
+  }
+
+  .header-content {
+    padding: clamp(6px, 1.2vh, 12px) clamp(16px, 3vw, 32px);
+  }
+
+  .logo-image {
+    height: clamp(40px, min(6vh, 7vw), 60px);
+  }
+}
+
+@media (min-height: 900px) {
+  :root {
+    --nav-height: clamp(90px, 10vh, 130px);
+  }
+
+  .header-content {
+    padding: clamp(16px, 2.5vh, 24px) clamp(24px, 4vw, 48px);
+  }
+
+  .logo-image {
+    height: clamp(65px, min(9vh, 10vw), 85px);
   }
 }
 

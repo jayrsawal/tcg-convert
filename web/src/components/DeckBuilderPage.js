@@ -2557,7 +2557,7 @@ const DeckBuilderPage = () => {
                       disabled={isDuplicatingDeck}
                     >
                       <RiFileCopyFill />
-                      {isDuplicatingDeck ? 'Duplicating...' : 'Duplicate'}
+                      <span>{isDuplicatingDeck ? 'Duplicating...' : 'Duplicate'}</span>
                     </button>
                   )}
                   <button 
@@ -2566,7 +2566,7 @@ const DeckBuilderPage = () => {
                     title="Export or import deck list"
                   >
                     <HiUpload />
-                    Import
+                    <span>Import</span>
                   </button>
                   <button
                     className="import-export-button-header download-grid-button"
@@ -2575,7 +2575,7 @@ const DeckBuilderPage = () => {
                     disabled={isCapturingGrid || loading || (deckProducts?.length || 0) === 0}
                   >
                     <HiDownload />
-                    {isCapturingGrid ? 'Preparing...' : 'Screenshot'}
+                    <span>{isCapturingGrid ? 'Preparing...' : 'Screenshot'}</span>
                   </button>
                 </div>
               }

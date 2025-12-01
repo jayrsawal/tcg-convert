@@ -2158,7 +2158,7 @@ useEffect(() => {
                       title="Import inventory"
                     >
                       <HiUpload />
-                      Import
+                      <span>Import</span>
                     </button>
                   )}
                   <button
@@ -2168,7 +2168,7 @@ useEffect(() => {
                     disabled={isCapturingGrid || (filteredProducts.length === 0 && products.length === 0)}
                   >
                     <HiDownload />
-                    Screenshot
+                    <span>Screenshot</span>
                   </button>
                 </div>
               }
