@@ -1,3 +1,81 @@
 /* ProductListingContent styles - shared between DeckBuilderPage and ProductsPage */
 /* Most styles are already in ProductsPage.css, this file is for any additional shared styles */
 
+.product-filter-container {
+    display: inline-flex;
+    flex-direction: row;
+    gap: 12px;
+}
+
+.product-filter button, .refresh-control button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #4a5568;
+    transition: all 0.2s ease;
+    width: 100%;
+    justify-content: center;
+}
+
+/* Filter Toggle Button - Hidden by default, shown on mobile */
+.filter-container-toggle {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    /* Show toggle button on mobile */
+    .filter-container-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        color: #4a5568;
+        background: rgba(0,0,0,0);
+        border: white;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        width: 100%;
+        justify-content: center;
+    }
+
+    .filter-container-toggle:hover {
+        transform: translateY(-1px);
+    }
+
+    .filter-toggle-icon {
+        font-size: 12px;
+        transition: transform 0.2s ease;
+    }
+
+    /* Collapse filter container by default on mobile */
+    .product-filter-container {
+        flex-direction: column;
+        max-height: 0;
+        overflow: hidden;
+        opacity: 0;
+        transition: max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+        margin: 0;
+        gap: 0;
+    }
+
+    /* Expanded state */
+    .product-filter-container:not(.collapsed) {
+        max-height: 1000px; /* Large enough to accommodate all filters */
+        opacity: 1;
+        margin-bottom: 12px;
+        gap: 12px;
+    }
+
+    .product-filter .control-label, .refresh-control .control-label {
+        display: none;
+    }
+}

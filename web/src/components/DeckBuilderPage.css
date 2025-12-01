@@ -90,7 +90,9 @@
 }
 
 .deck-builder-header-actions {
-  display: flex;
+  display: inline-flex;
+  flex-direction: row;
+  width: 100%;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
@@ -115,18 +117,6 @@
 
 .download-grid-button svg {
   font-size: 16px;
-}
-
-@media (max-width: 700px) {
-  .deck-builder-header-actions {
-    flex-direction: column;
-    align-items: flex-end;
-  }
-
-  .deck-builder-header-actions > button {
-    width: 100%;
-    justify-content: center;
-  }
 }
 
 body.disable-card-animations .deck-controls,
@@ -1436,7 +1426,7 @@ body.disable-card-animations .product-card-new {
   /* On small screens, sidebar becomes a full-screen overlay */
   .deck-sidebar {
     position: fixed;
-    top: 0;
+    top: 115px;
     left: 0;
     right: 0;
     bottom: 0;

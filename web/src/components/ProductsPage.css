@@ -348,11 +348,6 @@
 @media (max-width: 720px) {
   /* On small screens, sidebar becomes a full-screen overlay */
   .products-page .deck-sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
     width: 100%;
     max-width: none;
     box-shadow: none;
@@ -653,12 +648,6 @@
 }
 
 /* Attribute Filters (Feature 3e) - Mobile-Friendly Panel */
-.attribute-filter-control {
-  display: flex;
-  flex-direction: column;
-  min-width: 140px;
-}
-
 .import-export-control {
   display: flex;
   flex-direction: column;
@@ -775,14 +764,14 @@
 /* Side Panel for Filters */
 .attribute-filters-panel {
   position: fixed;
-  top: 0;
+  top: 115px;
   right: 0;
   width: 100%;
   max-width: 400px;
   height: 100vh;
   background: white;
   box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
-  z-index: 999;
+  z-index: 1002;
   display: flex;
   flex-direction: column;
   animation: slideIn 0.3s ease;
@@ -899,11 +888,6 @@
   gap: 20px;
 }
 
-.attribute-filter-control {
-  display: flex;
-  flex-direction: column;
-}
-
 .attribute-filter-checkboxes {
   display: flex;
   flex-direction: column;
@@ -947,21 +931,6 @@
 /* Card List Header now uses PageHeader component, but keep these for compatibility */
 .card-list-header {
   /* Styles are now in PageHeader.css */
-}
-
-.import-export-button-header {
-  padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .import-export-button-header:hover {
@@ -2145,10 +2114,13 @@
     align-items: stretch;
   }
 
+  .product-filter .control-label {
+    display: none;
+  }
+
   .search-control,
   .group-filter,
   .sort-control,
-  .attribute-filter-control,
   .favorites-filter-control {
     width: 100%;
     min-width: unset;
@@ -2176,7 +2148,7 @@
 
   .products-grid {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 16px;
+    gap: 12px;
   }
 
   .product-info {

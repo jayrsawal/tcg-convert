@@ -2172,7 +2172,7 @@ useEffect(() => {
                   </button>
                 </div>
               }
-              badge={canEditInventory ? 'Inventory Manager' : 'View Mode'}
+              badge={canEditInventory ? 'Manager Mode' : 'View Mode'}
               maxPercentage={maxPercentage}
               setMaxPercentage={setMaxPercentage}
               className="card-list-header"

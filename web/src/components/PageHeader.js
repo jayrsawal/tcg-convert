@@ -85,7 +85,7 @@ const PageHeader = ({
           )}
           {badge && <span className="page-header-badge">{badge}</span>}
           </div>
-        <div className="page-header-actions">
+          <div className="page-header-actions">
           {/* Market controls (max percentage) */}
           {maxPercentage !== undefined && setMaxPercentage && (
             <div className="page-header-market-controls">
@@ -109,9 +109,9 @@ const PageHeader = ({
               </div>
             </div>
           )}
-          {actions}
         </div>
       </div>
+      {actions}
     </div>
   );
 };

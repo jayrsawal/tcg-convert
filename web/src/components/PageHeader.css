@@ -4,9 +4,6 @@
   color: white;
   padding: 20px 24px;
   margin: -24px -24px 24px -24px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   gap: 20px;
   border-radius: 0;
 }
@@ -17,6 +14,7 @@
   justify-content: space-between;
   gap: 12px;
   flex: 1;
+  padding-bottom: 24px;
 }
 
 .page-header-title-section {
@@ -103,6 +101,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.import-export-button-header {
+    display: inline-flex !important;
 }
 
 .edit-name-button:hover,
@@ -234,13 +236,6 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
-  }
-
-  .page-header-display {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-    width: 100%;
   }
 
   .page-header-title-section {

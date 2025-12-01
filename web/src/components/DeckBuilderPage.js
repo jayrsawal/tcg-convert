@@ -2557,7 +2557,7 @@ const DeckBuilderPage = () => {
                       disabled={isDuplicatingDeck}
                     >
                       <RiFileCopyFill />
-                      {isDuplicatingDeck ? 'Duplicating...' : 'Duplicate Deck'}
+                      {isDuplicatingDeck ? 'Duplicating...' : 'Duplicate'}
                     </button>
                   )}
                   <button 
@@ -2575,7 +2575,7 @@ const DeckBuilderPage = () => {
                     disabled={isCapturingGrid || loading || (deckProducts?.length || 0) === 0}
                   >
                     <HiDownload />
-                    {isCapturingGrid ? 'Preparing...' : 'Download Grid'}
+                    {isCapturingGrid ? 'Preparing...' : 'Screenshot'}
                   </button>
                 </div>
               }

@@ -88,6 +88,7 @@ const ProductListingContent = ({
   // Local state for search input (to avoid triggering search on every keystroke)
   const [searchInputValue, setSearchInputValue] = useState(searchQuery || '');
   const [showGroupFilters, setShowGroupFilters] = useState(false);
+  const [filtersCollapsed, setFiltersCollapsed] = useState(true); // Collapsed by default on mobile
 
   // Sync local state with prop when it changes externally
   useEffect(() => {
@@ -286,259 +287,272 @@ const ProductListingContent = ({
             </div>
           )}
 
-          {/* Group Filter - Dropdown */}
-          {!loadingGroups && groups.length > 0 && (
-            <div className="group-filter-control">
-              <label className="control-label">Filter by Set:</label>
-              <button
-                className="group-filters-toggle"
-                onClick={() => setShowGroupFilters(!showGroupFilters)}
-                disabled={loadingGroups || groups.length === 0}
-                title={loadingGroups ? 'Loading sets...' : groups.length === 0 ? 'No sets available' : 'Filter by set'}
-              >
-                <span className="filter-icon">📦</span>
-                <span>Sets</span>
-                {!loadingGroups && groups.length > 0 && selectedGroupIds && selectedGroupIds.length > 0 && (
-                  <span className="active-filters-badge">{selectedGroupIds.length}</span>
-                )}
-              </button>
-            </div>
-          )}
+          {/* Filter Toggle Button - Only visible on mobile */}
+          <button
+            className="filter-container-toggle"
+            onClick={() => setFiltersCollapsed(!filtersCollapsed)}
+            aria-label={filtersCollapsed ? 'Show filters' : 'Hide filters'}
+            title={filtersCollapsed ? 'Show filters' : 'Hide filters'}
+          >
+            <span className="filter-toggle-icon">{filtersCollapsed ? '▼' : '▲'}</span>
+            <span>More Filters</span>
+          </button>
 
-          {/* Group Filters Panel */}
-          {groups.length > 0 && showGroupFilters && (
-            <>
-              <div 
-                className="group-filters-overlay"
-                onClick={() => setShowGroupFilters(false)}
-              />
-              <div className="group-filters-panel">
-                <div className="group-filters-panel-header">
-                  <h3 className="filters-panel-title">Filter by Set</h3>
-                  <div className="filters-header-actions">
-                    <button
-                      className="close-filters-button"
-                      onClick={() => setShowGroupFilters(false)}
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-                <div className="group-filters-panel-content">
-                  <div className="group-checkboxes-container">
-                    {groups.map((group) => {
-                      const groupId = group.group_id || group.groupId || group.id;
-                      const groupName = group.name || `Group ${groupId}`;
-                      const isChecked = selectedGroupIds && selectedGroupIds.includes(groupId);
-                      return (
-                        <label key={groupId} className="group-checkbox-label">
-                          <input
-                            type="checkbox"
-                            checked={isChecked || false}
-                            onChange={(e) => {
-                              const currentIds = selectedGroupIds || [];
-                              if (e.target.checked) {
-                                setSelectedGroupIds([...currentIds, groupId]);
-                              } else {
-                                setSelectedGroupIds(currentIds.filter(id => id !== groupId));
-                              }
-                            }}
-                            className="group-checkbox"
-                          />
-                          <span>{groupName}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div className="group-filters-panel-footer">
-                  {selectedGroupIds && selectedGroupIds.length > 0 && (
-                    <button
-                      className="clear-filters-button-footer"
-                      onClick={() => setSelectedGroupIds([])}
-                      aria-label="Clear all set filters"
-                    >
-                      Clear All
-                    </button>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Multi-Column Sort */}
-          {setSortColumns && setSortDirections ? (
-            <div className="sort-control">
-              <label className="control-label">Sort:</label>
-              <MultiColumnSort
-                sortColumns={sortColumns || []}
-                sortDirections={sortDirections || []}
-                onApply={handleMultiColumnSortApply}
-              />
-            </div>
-          ) : (
-            /* Legacy Sort Dropdown */
-            <div className="sort-control">
-              <label htmlFor="sort-select" className="control-label">Sort:</label>
-              <select
-                id="sort-select"
-                className="sort-select"
-                value={sortOption}
-                onChange={handleSortChange}
-              >
-                <option value="name-asc">Name (A-Z)</option>
-                <option value="name-desc">Name (Z-A)</option>
-                <option value="number-asc">Number (Low-High)</option>
-                <option value="number-desc">Number (High-Low)</option>
-              </select>
-            </div>
-          )}
-
-          {/* Attribute Filters Button */}
-          {(categoryKeys.length > 0 || loadingAttributes) && (
-            <div className="attribute-filter-control">
-              <label className="control-label">More Filters:</label>
-              <button
-                className="attribute-filters-toggle"
-                onClick={handleToggleAttributeFilters}
-                disabled={loadingAttributes || categoryKeys.length === 0}
-                title={loadingAttributes ? 'Loading attributes...' : categoryKeys.length === 0 ? 'No attributes available' : 'Filter by attributes'}
-              >
-                <span className="filter-icon">🔍</span>
-                <span>Attributes</span>
-                {loadingAttributes && <span className="loading-indicator">...</span>}
-                {!loadingAttributes && categoryKeys.length > 0 && totalSelectedFilters > 0 && (
-                  <span className="active-filters-badge">{totalSelectedFilters}</span>
-                )}
-              </button>
-            </div>
-          )}
-
-          {/* Refresh Button - Rightmost */}
-          {onRefresh && (
-            <div className="refresh-control">
-              <button
-                className="attribute-filters-toggle"
-                onClick={onRefresh}
-                disabled={loading}
-                title="Refresh products"
-                aria-label="Refresh products"
-              >
-                <span className="refresh-icon">🔄</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Attribute Filters Panel */}
-        {categoryKeys.length > 0 && showAttributeFilters && (
-          <>
-            <div 
-              className="attribute-filters-overlay"
-              onClick={() => setShowAttributeFilters(false)}
-            />
-            <div className="attribute-filters-panel">
-              <div className="attribute-filters-panel-header">
-                <h3 className="filters-panel-title">Filter by Attributes</h3>
-                <div className="filters-header-actions">
-                  <button
-                    className="close-filters-button"
-                    onClick={() => setShowAttributeFilters(false)}
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-              <div className="attribute-filters-panel-content">
-                {loadingAttributes ? (
-                  <div className="attributes-loading">
-                    <span className="loading-text">Loading attribute filters...</span>
-                  </div>
-                ) : (
-                  <div className="attribute-filters-list">
-                    {categoryKeys.length === 0 ? (
-                      <div className="no-attributes-message">
-                        <p>No attributes available for this category.</p>
-                      </div>
-                    ) : (
-                      categoryKeys.map((key) => {
-                        const values = attributeValues[key] || [];
-                        if (values.length === 0) return null;
-                        
-                        const selectedValues = Array.isArray(pendingAttributeFilters[key]) 
-                          ? pendingAttributeFilters[key] 
-                          : (pendingAttributeFilters[key] ? [pendingAttributeFilters[key]] : []);
-                        
-                        const isCollapsed = collapsedAttributeGroups[key] !== false; // Default to collapsed
-                        
-                        return (
-                          <div key={key} className="attribute-filter-group">
-                            <div 
-                              className="attribute-filter-group-header"
-                              onClick={() => toggleAttributeGroup ? toggleAttributeGroup(key) : setCollapsedAttributeGroups(prev => ({ ...prev, [key]: !prev[key] }))}
-                            >
-                              <button 
-                                className="attribute-group-toggle"
-                                aria-label={isCollapsed ? 'Expand' : 'Collapse'}
-                              >
-                                {isCollapsed ? '▶' : '▼'}
-                              </button>
-                              <label className="attribute-filter-group-label">{key}:</label>
-                              {selectedValues.length > 0 && (
-                                <span className="attribute-group-count">({selectedValues.length})</span>
-                              )}
-                            </div>
-                            {!isCollapsed && (
-                              <div className="attribute-filter-checkboxes">
-                                {values.map((value) => {
-                                  const isChecked = selectedValues.includes(value);
-                                  return (
-                                    <label 
-                                      key={value} 
-                                      className="attribute-filter-checkbox-label"
-                                      htmlFor={`attr-filter-${key}-${value}`}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        id={`attr-filter-${key}-${value}`}
-                                        className="attribute-filter-checkbox"
-                                        checked={isChecked}
-                                        onChange={() => handleAttributeFilter(key, value)}
-                                      />
-                                      <span className="checkbox-text">{value}</span>
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="attribute-filters-panel-footer">
-                {Object.keys(pendingAttributeFilters).length > 0 && (
-                  <button
-                    className="clear-filters-button-footer"
-                    onClick={handleClearPendingFilters}
-                    aria-label="Clear all pending filters"
-                  >
-                    Clear All
-                  </button>
-                )}
+          <div className={`product-filter-container ${filtersCollapsed ? 'collapsed' : ''}`}>
+            {/* Group Filter - Dropdown */}
+            {!loadingGroups && groups.length > 0 && (
+                <div className="product-filter group-filter-control">
+                <label className="control-label">Filter by Set:</label>
                 <button
-                  className="apply-filters-button"
-                  onClick={handleApplyAttributeFilters}
-                  disabled={Object.keys(pendingAttributeFilters).length === 0}
+                    className="attribute-filters-toggle"
+                    onClick={() => setShowGroupFilters(!showGroupFilters)}
+                    disabled={loadingGroups || groups.length === 0}
+                    title={loadingGroups ? 'Loading sets...' : groups.length === 0 ? 'No sets available' : 'Filter by set'}
                 >
-                  Apply Filters
+                    <span className="filter-icon">📦</span>
+                    <span>Sets</span>
+                    {!loadingGroups && groups.length > 0 && selectedGroupIds && selectedGroupIds.length > 0 && (
+                    <span className="active-filters-badge">{selectedGroupIds.length}</span>
+                    )}
                 </button>
-              </div>
+                </div>
+            )}
+
+            {/* Group Filters Panel */}
+            {groups.length > 0 && showGroupFilters && (
+                <>
+                <div 
+                    className="product-filter group-filters-overlay"
+                    onClick={() => setShowGroupFilters(false)}
+                />
+                <div className="group-filters-panel">
+                    <div className="group-filters-panel-header">
+                    <h3 className="filters-panel-title">Filter by Set</h3>
+                    <div className="filters-header-actions">
+                        <button
+                        className="close-filters-button"
+                        onClick={() => setShowGroupFilters(false)}
+                        >
+                        ×
+                        </button>
+                    </div>
+                    </div>
+                    <div className="group-filters-panel-content">
+                    <div className="group-checkboxes-container">
+                        {groups.map((group) => {
+                        const groupId = group.group_id || group.groupId || group.id;
+                        const groupName = group.name || `Group ${groupId}`;
+                        const isChecked = selectedGroupIds && selectedGroupIds.includes(groupId);
+                        return (
+                            <label key={groupId} className="group-checkbox-label">
+                            <input
+                                type="checkbox"
+                                checked={isChecked || false}
+                                onChange={(e) => {
+                                const currentIds = selectedGroupIds || [];
+                                if (e.target.checked) {
+                                    setSelectedGroupIds([...currentIds, groupId]);
+                                } else {
+                                    setSelectedGroupIds(currentIds.filter(id => id !== groupId));
+                                }
+                                }}
+                                className="group-checkbox"
+                            />
+                            <span>{groupName}</span>
+                            </label>
+                        );
+                        })}
+                    </div>
+                    </div>
+                    <div className="group-filters-panel-footer">
+                    {selectedGroupIds && selectedGroupIds.length > 0 && (
+                        <button
+                        className="clear-filters-button-footer"
+                        onClick={() => setSelectedGroupIds([])}
+                        aria-label="Clear all set filters"
+                        >
+                        Clear All
+                        </button>
+                    )}
+                    </div>
+                </div>
+                </>
+            )}
+
+            {/* Attribute Filters Button */}
+            {(categoryKeys.length > 0 || loadingAttributes) && (
+                <div className="product-filter group-filter-control">
+                <label className="control-label">More Filters:</label>
+                <button
+                    className="attribute-filters-toggle"
+                    onClick={handleToggleAttributeFilters}
+                    disabled={loadingAttributes || categoryKeys.length === 0}
+                    title={loadingAttributes ? 'Loading attributes...' : categoryKeys.length === 0 ? 'No attributes available' : 'Filter by attributes'}
+                >
+                    <span className="filter-icon">🔍</span>
+                    <span>Attributes</span>
+                    {loadingAttributes && <span className="loading-indicator">...</span>}
+                    {!loadingAttributes && categoryKeys.length > 0 && totalSelectedFilters > 0 && (
+                    <span className="active-filters-badge">{totalSelectedFilters}</span>
+                    )}
+                </button>
+                </div>
+            )}
+
+            {/* Multi-Column Sort */}
+            {setSortColumns && setSortDirections ? (
+                <div className="product-filter group-filter-control">
+                <label className="control-label">Sort:</label>
+                <MultiColumnSort
+                    sortColumns={sortColumns || []}
+                    sortDirections={sortDirections || []}
+                    onApply={handleMultiColumnSortApply}
+                />
+                </div>
+            ) : (
+                /* Legacy Sort Dropdown */
+                <div className="sort-control">
+                <label htmlFor="sort-select" className="control-label">Sort:</label>
+                <select
+                    id="sort-select"
+                    className="sort-select"
+                    value={sortOption}
+                    onChange={handleSortChange}
+                >
+                    <option value="name-asc">Name (A-Z)</option>
+                    <option value="name-desc">Name (Z-A)</option>
+                    <option value="number-asc">Number (Low-High)</option>
+                    <option value="number-desc">Number (High-Low)</option>
+                </select>
+                </div>
+            )}
+        </div>
+            
+        {/* Refresh Button - Rightmost */}
+        {onRefresh && (
+            <div className="refresh-control">
+                <label className="control-label">&nbsp;</label>
+                <button
+                    className="attribute-filters-toggle"
+                    onClick={onRefresh}
+                    disabled={loading}
+                    title="Refresh products"
+                    aria-label="Refresh products"
+                >
+                    <span className="refresh-icon">🔄</span>
+                </button>
             </div>
-          </>
         )}
+    </div>
+    {/* Attribute Filters Panel */}
+    {categoryKeys.length > 0 && showAttributeFilters && (
+        <>
+        <div 
+            className="attribute-filters-overlay"
+            onClick={() => setShowAttributeFilters(false)}
+        />
+        <div className="attribute-filters-panel">
+            <div className="attribute-filters-panel-header">
+            <h3 className="filters-panel-title">Filter by Attributes</h3>
+            <div className="filters-header-actions">
+                <button
+                className="close-filters-button"
+                onClick={() => setShowAttributeFilters(false)}
+                >
+                ×
+                </button>
+            </div>
+            </div>
+            <div className="attribute-filters-panel-content">
+            {loadingAttributes ? (
+                <div className="attributes-loading">
+                <span className="loading-text">Loading attribute filters...</span>
+                </div>
+            ) : (
+                <div className="attribute-filters-list">
+                {categoryKeys.length === 0 ? (
+                    <div className="no-attributes-message">
+                    <p>No attributes available for this category.</p>
+                    </div>
+                ) : (
+                    categoryKeys.map((key) => {
+                    const values = attributeValues[key] || [];
+                    if (values.length === 0) return null;
+                    
+                    const selectedValues = Array.isArray(pendingAttributeFilters[key]) 
+                        ? pendingAttributeFilters[key] 
+                        : (pendingAttributeFilters[key] ? [pendingAttributeFilters[key]] : []);
+                    
+                    const isCollapsed = collapsedAttributeGroups[key] !== false; // Default to collapsed
+                    
+                    return (
+                        <div key={key} className="attribute-filter-group">
+                        <div 
+                            className="attribute-filter-group-header"
+                            onClick={() => toggleAttributeGroup ? toggleAttributeGroup(key) : setCollapsedAttributeGroups(prev => ({ ...prev, [key]: !prev[key] }))}
+                        >
+                            <button 
+                            className="attribute-group-toggle"
+                            aria-label={isCollapsed ? 'Expand' : 'Collapse'}
+                            >
+                            {isCollapsed ? '▶' : '▼'}
+                            </button>
+                            <label className="attribute-filter-group-label">{key}:</label>
+                            {selectedValues.length > 0 && (
+                            <span className="attribute-group-count">({selectedValues.length})</span>
+                            )}
+                        </div>
+                        {!isCollapsed && (
+                            <div className="attribute-filter-checkboxes">
+                            {values.map((value) => {
+                                const isChecked = selectedValues.includes(value);
+                                return (
+                                <label 
+                                    key={value} 
+                                    className="attribute-filter-checkbox-label"
+                                    htmlFor={`attr-filter-${key}-${value}`}
+                                >
+                                    <input
+                                    type="checkbox"
+                                    id={`attr-filter-${key}-${value}`}
+                                    className="attribute-filter-checkbox"
+                                    checked={isChecked}
+                                    onChange={() => handleAttributeFilter(key, value)}
+                                    />
+                                    <span className="checkbox-text">{value}</span>
+                                </label>
+                                );
+                            })}
+                            </div>
+                        )}
+                        </div>
+                    );
+                    })
+                )}
+                </div>
+            )}
+            </div>
+            <div className="attribute-filters-panel-footer">
+            {Object.keys(pendingAttributeFilters).length > 0 && (
+                <button
+                className="clear-filters-button-footer"
+                onClick={handleClearPendingFilters}
+                aria-label="Clear all pending filters"
+                >
+                Clear All
+                </button>
+            )}
+            <button
+                className="apply-filters-button"
+                onClick={handleApplyAttributeFilters}
+                disabled={Object.keys(pendingAttributeFilters).length === 0}
+            >
+                Apply Filters
+            </button>
+            </div>
+        </div>
+        </>
+    )}
       </div>
 
       {/* Loading State - only show when initially loading, not when loading more */}
