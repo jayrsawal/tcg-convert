@@ -7,7 +7,7 @@ import { useCurrency } from '../contexts/CurrencyContext';
 import { useTCGPercentage } from '../contexts/TCGPercentageContext';
 import { getFavorites, toggleFavorite } from '../lib/favorites';
 import { getUserInventory, bulkUpdateInventory } from '../lib/inventory';
-import { fetchGroupsByCategory, fetchProductExtendedDataKeyValues, filterProducts, searchProducts, fetchProductsBulk, extractExtendedDataFromProduct, fetchCurrentPricesBulk, fetchProfileByUsername } from '../lib/api';
+import { fetchGroupsByCategory, fetchProductExtendedDataKeyValues, filterProducts, searchProducts, extractExtendedDataFromProduct, fetchCurrentPricesBulk, fetchProfileByUsername } from '../lib/api';
 import { parseImportText, fetchProductsByCardNumbers, matchProductsToImportLines } from '../lib/importUtils';
 import { calculateDelta as calculateDeltaUtil } from '../lib/deltaUtils';
 import { applyImportAdditive, applyRemoval, getMergedItems } from '../lib/stagingUtils';
@@ -42,7 +42,7 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
   // This ensures all loaded products (from filter, import, etc.) are available everywhere
   const [productsMap, setProductsMap] = useState({}); // { productId: product }
   const [groups, setGroups] = useState([]);
-  const [selectedGroupId, setSelectedGroupId] = useState(null);
+  const [selectedGroupIds, setSelectedGroupIds] = useState([]);
   const [categoryKeys, setCategoryKeys] = useState([]);
   const [attributeFilters, setAttributeFilters] = useState({});
   const [pendingAttributeFilters, setPendingAttributeFilters] = useState({});
@@ -51,7 +51,9 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
   const [collapsedAttributeGroups, setCollapsedAttributeGroups] = useState({});
   const [categoryAttributesCache, setCategoryAttributesCache] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortOption, setSortOption] = useState('name-asc');
+  const [sortOption, setSortOption] = useState('name-asc'); // Legacy support
+  const [sortColumns, setSortColumns] = useState([]);
+  const [sortDirections, setSortDirections] = useState([]);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [favorites, setFavorites] = useState(new Set());
   const [showOwnedOnly, setShowOwnedOnly] = useState(false);
@@ -126,6 +128,35 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
       order: option?.includes('desc') ? 'desc' : 'asc'
     };
   };
+
+  // Get sort parameters for API (supports both legacy and new multi-column format)
+  // Accepts optional override parameters to bypass state (useful when state hasn't updated yet)
+  const getAPISortParams = useCallback((overrideColumns = null, overrideDirections = null) => {
+    // If override parameters are provided, use them
+    if (overrideColumns && overrideColumns.length > 0) {
+      return {
+        sort_columns: overrideColumns,
+        sort_direction: overrideDirections && overrideDirections.length === overrideColumns.length
+          ? overrideDirections
+          : overrideColumns.map(() => 'asc')
+      };
+    }
+    // If multi-column sort is active, use it
+    if (sortColumns && sortColumns.length > 0) {
+      return {
+        sort_columns: sortColumns,
+        sort_direction: sortDirections.length === sortColumns.length 
+          ? sortDirections 
+          : sortColumns.map(() => 'asc')
+      };
+    }
+    // Otherwise, fall back to legacy single-column sort
+    const { field, order } = getSortParams(sortOption);
+    return {
+      sort_by: field,
+      sort_order: order
+    };
+  }, [sortColumns, sortDirections, sortOption]);
   
   const loadingProductsRef = useRef(false);
   const loadingGroupsRef = useRef(false);
@@ -379,7 +410,7 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
     }
   }, [categoryId, categoryAttributesCache]);
 
-  const loadProducts = useCallback(async (page = 1, append = false) => {
+  const loadProducts = useCallback(async (page = 1, append = false, overrideSortColumns = null, overrideSortDirections = null) => {
     if (viewMode) return;
     if (!categoryId) return;
     if (loadingProductsRef.current && !append) return; // Allow loading more pages
@@ -455,21 +486,35 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
         }
         
         if (productIds.size > 0) {
-          // Fetch all products at once using bulk endpoint
+          // Fetch all products at once using filter endpoint with product_ids
           const productIdsArray = Array.from(productIds);
-          productsData = await fetchProductsBulk(productIdsArray);
-          total = productsData.length;
-          pageNum = 1;
-          hasMore = false; // We loaded everything, no more pages
+          const apiSortParams = getAPISortParams(overrideSortColumns, overrideSortDirections);
+          const filterParams = {
+            category_id: parseInt(categoryId, 10),
+            product_ids: productIdsArray,
+            ...apiSortParams,
+            page: 1,
+            limit: 1000 // Use max limit to get all products at once
+          };
           
-          // Filter by category if needed (products from bulk may not be filtered by category)
-          if (categoryId) {
-            const categoryIdInt = parseInt(categoryId, 10);
-            productsData = productsData.filter(p => {
-              const productCategoryId = p.category_id || p.categoryId;
-              return productCategoryId === categoryIdInt;
-            });
-            total = productsData.length;
+          const response = await filterProducts(filterParams);
+          
+          if (response && typeof response === 'object') {
+            // Extract products - API returns data in 'data' field per PaginatedResponse contract
+            if (response.data && Array.isArray(response.data)) {
+              productsData = response.data;
+            } else if (response.products && Array.isArray(response.products)) {
+              productsData = response.products;
+            } else if (response.results && Array.isArray(response.results)) {
+              productsData = response.results;
+            } else if (Array.isArray(response)) {
+              productsData = response;
+            }
+            
+            // Extract pagination info
+            total = response.total !== null && response.total !== undefined ? response.total : productsData.length;
+            pageNum = 1;
+            hasMore = false; // We loaded everything, no more pages
           }
         } else {
           // No products match the filter
@@ -481,13 +526,12 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
         // Normal pagination flow using filter endpoint
         // When searching, use a larger page size to reduce network calls
         const pageLimit = searchQuery && searchQuery.trim() ? 1000 : 64;
-        const { field: sortField, order: sortOrder } = getSortParams(sortOption);
+        const apiSortParams = getAPISortParams(overrideSortColumns, overrideSortDirections);
         const filterParams = {
           category_id: parseInt(categoryId, 10),
-          group_id: selectedGroupId,
+          group_id: selectedGroupIds && selectedGroupIds.length > 0 ? selectedGroupIds : undefined,
           filters: attributeFilters,
-          sort_by: sortField,
-          sort_order: sortOrder,
+          ...apiSortParams,
           page: page,
           limit: pageLimit  // Use larger limit when searching
         };
@@ -663,7 +707,7 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
         setLoadingMore(false);
       }
     }
-  }, [viewMode, categoryId, selectedGroupId, attributeFilters, sortOption, showFavoritesOnly, showOwnedOnly, favorites, inventory, searchQuery]);
+  }, [viewMode, categoryId, selectedGroupIds, attributeFilters, sortOption, sortColumns, sortDirections, showFavoritesOnly, showOwnedOnly, favorites, inventory, searchQuery, getAPISortParams]);
 
   const loadMoreProducts = useCallback(async () => {
     if (viewMode || loadingMore || !hasMorePages) {
@@ -710,12 +754,11 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
 
     try {
       loadingAllProductsRef.current = true;
-      const { field: sortField, order: sortOrder } = getSortParams(sortOption);
+      const apiSortParams = getAPISortParams();
       const filterParams = {
         category_id: parseInt(categoryId, 10),
         filters: {},
-        sort_by: sortField,
-        sort_order: sortOrder
+        ...apiSortParams
       };
 
       const response = await filterProducts(filterParams);
@@ -741,7 +784,7 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
     } finally {
       loadingAllProductsRef.current = false;
     }
-  }, [categoryId, viewMode, mergeProductsIntoMap, sortOption, loadProductExtendedData]);
+  }, [categoryId, viewMode, mergeProductsIntoMap, sortOption, sortColumns, sortDirections, loadProductExtendedData, getAPISortParams]);
 
   const loadPricesForInventoryProducts = useCallback(async () => {
     const allProductsArray = Object.values(productsMap);
@@ -799,29 +842,35 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
       });
     }
 
-    // Sort
-    filtered.sort((a, b) => {
-      if (sortOption.startsWith('name')) {
-        const aName = (a.name || '').toLowerCase();
-        const bName = (b.name || '').toLowerCase();
-        return sortOption === 'name-desc'
-          ? bName.localeCompare(aName)
-          : aName.localeCompare(bName);
-      }
-      if (sortOption.startsWith('number')) {
-        const aNum = getProductNumberValue(a);
-        const bNum = getProductNumberValue(b);
-        if (!aNum && !bNum) return 0;
-        if (!aNum) return sortOption === 'number-asc' ? 1 : -1;
-        if (!bNum) return sortOption === 'number-asc' ? -1 : 1;
-        return sortOption === 'number-desc'
-          ? bNum.localeCompare(aNum, undefined, { numeric: true, sensitivity: 'base' })
-          : aNum.localeCompare(bNum, undefined, { numeric: true, sensitivity: 'base' });
-      }
-      const aId = a.product_id || a.id || 0;
-      const bId = b.product_id || b.id || 0;
-      return sortOption.includes('desc') ? bId - aId : aId - bId;
-    });
+    // Sort - only apply client-side sorting if NOT using multi-column API sort
+    // When using multi-column sort (sortColumns.length > 0), the API already sorted the products
+    // so we should preserve that order
+    if (!sortColumns || sortColumns.length === 0) {
+      // Legacy single-column client-side sorting
+      filtered.sort((a, b) => {
+        if (sortOption.startsWith('name')) {
+          const aName = (a.name || '').toLowerCase();
+          const bName = (b.name || '').toLowerCase();
+          return sortOption === 'name-desc'
+            ? bName.localeCompare(aName)
+            : aName.localeCompare(bName);
+        }
+        if (sortOption.startsWith('number')) {
+          const aNum = getProductNumberValue(a);
+          const bNum = getProductNumberValue(b);
+          if (!aNum && !bNum) return 0;
+          if (!aNum) return sortOption === 'number-asc' ? 1 : -1;
+          if (!bNum) return sortOption === 'number-asc' ? -1 : 1;
+          return sortOption === 'number-desc'
+            ? bNum.localeCompare(aNum, undefined, { numeric: true, sensitivity: 'base' })
+            : aNum.localeCompare(bNum, undefined, { numeric: true, sensitivity: 'base' });
+        }
+        const aId = a.product_id || a.id || 0;
+        const bId = b.product_id || b.id || 0;
+        return sortOption.includes('desc') ? bId - aId : aId - bId;
+      });
+    }
+    // If using multi-column sort, products are already sorted by the API, so we preserve that order
 
     setFilteredProducts(filtered);
     
@@ -831,19 +880,28 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
       showFavoritesOnly,
       showOwnedOnly,
       sortOption,
+      sortColumns: sortColumns || [],
+      sortDirections: sortDirections || [],
       attributeFilters: JSON.stringify(attributeFilters), // Stringify for comparison
       productsLength: products.length
     };
     
-    const prevState = prevFilterStateRef.current;
+    const prevState = prevFilterStateRef.current || {};
     
     // Reset if any filter changed or products list was replaced
+    const prevSortColumns = prevState.sortColumns || [];
+    const prevSortDirections = prevState.sortDirections || [];
+    const currentSortColumns = sortColumns || [];
+    const currentSortDirections = sortDirections || [];
+    
     const shouldReset = 
-      currentFilterState.searchQuery !== prevState.searchQuery ||
-      currentFilterState.showFavoritesOnly !== prevState.showFavoritesOnly ||
-      currentFilterState.showOwnedOnly !== prevState.showOwnedOnly ||
-      currentFilterState.sortOption !== prevState.sortOption ||
-      currentFilterState.attributeFilters !== prevState.attributeFilters ||
+      currentFilterState.searchQuery !== (prevState.searchQuery || '') ||
+      currentFilterState.showFavoritesOnly !== (prevState.showFavoritesOnly || false) ||
+      currentFilterState.showOwnedOnly !== (prevState.showOwnedOnly || false) ||
+      currentFilterState.sortOption !== (prevState.sortOption || 'name-asc') ||
+      JSON.stringify(currentSortColumns) !== JSON.stringify(prevSortColumns) ||
+      JSON.stringify(currentSortDirections) !== JSON.stringify(prevSortDirections) ||
+      currentFilterState.attributeFilters !== (prevState.attributeFilters || '{}') ||
       (prevState.productsLength === 0 && currentFilterState.productsLength > 0) ||
       (prevState.productsLength > 0 && currentFilterState.productsLength === 0);
     
@@ -983,8 +1041,30 @@ useEffect(() => {
     const loadViewProducts = async () => {
       try {
         setLoading(true);
-        const productsData = await fetchProductsBulk(productIds);
+        // Use filterProducts with product_ids instead of fetchProductsBulk
+        const filterParams = {
+          category_id: parseInt(categoryId, 10),
+          product_ids: productIds,
+          page: 1,
+          limit: 1000 // Use max limit to get all products at once
+        };
+        
+        const response = await filterProducts(filterParams);
         if (!isMounted) return;
+        
+        let productsData = [];
+        if (response && typeof response === 'object') {
+          if (response.data && Array.isArray(response.data)) {
+            productsData = response.data;
+          } else if (response.products && Array.isArray(response.products)) {
+            productsData = response.products;
+          } else if (response.results && Array.isArray(response.results)) {
+            productsData = response.results;
+          } else if (Array.isArray(response)) {
+            productsData = response;
+          }
+        }
+        
         setProducts(productsData);
         setFilteredProducts(productsData);
         mergeProductsIntoMap(productsData);
@@ -1037,7 +1117,7 @@ useEffect(() => {
     return () => {
       isMounted = false;
     };
-  }, [viewMode, viewInventory, viewInventoryLoading, mergeProductsIntoMap, loadProductExtendedData]);
+  }, [viewMode, viewInventory, viewInventoryLoading, categoryId, mergeProductsIntoMap, loadProductExtendedData]);
 
   useEffect(() => {
     if (categoryId) {
@@ -1111,10 +1191,6 @@ useEffect(() => {
       ...prev,
       [key]: !prev[key]
     }));
-  };
-
-  const handleGroupFilter = (groupId) => {
-    setSelectedGroupId(groupId);
   };
 
   // Removed unused handlers - ProductListingContent uses inline handlers
@@ -2115,14 +2191,18 @@ useEffect(() => {
               setSearchQuery={setSearchQuery}
               sortOption={sortOption}
               setSortOption={setSortOption}
+              sortColumns={sortColumns}
+              setSortColumns={setSortColumns}
+              sortDirections={sortDirections}
+              setSortDirections={setSortDirections}
               showFavoritesOnly={showFavoritesOnly}
               setShowFavoritesOnly={setShowFavoritesOnly}
               showOwnedOnly={showOwnedOnly}
               setShowOwnedOnly={setShowOwnedOnly}
               showInDeckOnly={undefined}
               setShowInDeckOnly={undefined}
-              selectedGroupId={selectedGroupId}
-              setSelectedGroupId={setSelectedGroupId}
+              selectedGroupIds={selectedGroupIds}
+              setSelectedGroupIds={setSelectedGroupIds}
               attributeFilters={attributeFilters}
               pendingAttributeFilters={pendingAttributeFilters}
               setPendingAttributeFilters={setPendingAttributeFilters}
@@ -2147,6 +2227,10 @@ useEffect(() => {
               hasMorePages={hasMorePages}
               onLoadMore={loadMoreProducts}
               newlyAddedProductIds={newlyAddedProductIds}
+              onRefresh={() => {
+                setCurrentPage(1);
+                loadProducts(1, false);
+              }}
               
               // User and permissions
               user={user}
@@ -2174,11 +2258,16 @@ useEffect(() => {
                 e.stopPropagation();
                 handleInventoryChange(productId, -1);
               } : undefined}
-              handleGroupFilter={handleGroupFilter}
               handleAttributeFilter={handleAttributeFilter}
               handleApplyAttributeFilters={handleApplyAttributeFilters}
               handleClearPendingFilters={handleClearPendingFilters}
               toggleAttributeGroup={toggleAttributeGroup}
+              onSortApply={(columns, directions) => {
+                // Explicitly reload products when sort is applied
+                // Pass sort parameters directly to bypass state that hasn't updated yet
+                setCurrentPage(1);
+                loadProducts(1, false, columns, directions);
+              }}
               
               // Custom render props
               renderProductCardActions={(product, productId, productIdStr, quantity) => {

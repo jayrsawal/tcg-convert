@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import MultiColumnSort from './MultiColumnSort';
 import './ProductListingContent.css';
 
 /**
@@ -9,16 +10,20 @@ const ProductListingContent = ({
   // State props
   searchQuery,
   setSearchQuery,
-  sortOption,
-  setSortOption,
+  sortOption, // Legacy support
+  setSortOption, // Legacy support
+  sortColumns,
+  setSortColumns,
+  sortDirections,
+  setSortDirections,
   showFavoritesOnly,
   setShowFavoritesOnly,
   showOwnedOnly,
   setShowOwnedOnly,
   showInDeckOnly,
   setShowInDeckOnly,
-  selectedGroupId,
-  setSelectedGroupId,
+  selectedGroupIds,
+  setSelectedGroupIds,
   attributeFilters,
   pendingAttributeFilters,
   setPendingAttributeFilters,
@@ -43,6 +48,7 @@ const ProductListingContent = ({
   hasMorePages,
   onLoadMore,
   newlyAddedProductIds = new Set(),
+  onRefresh, // Callback to refresh/reload products
   
   // User and permissions
   user,
@@ -61,11 +67,11 @@ const ProductListingContent = ({
   onFavoriteToggle,
   onAddToDeck,
   onRemoveFromDeck,
-  handleGroupFilter,
   handleAttributeFilter,
   handleApplyAttributeFilters,
   handleClearPendingFilters,
   toggleAttributeGroup,
+  onSortApply, // Callback when sort is applied
   
   // Custom render props
   renderProductCardActions,
@@ -81,6 +87,7 @@ const ProductListingContent = ({
 }) => {
   // Local state for search input (to avoid triggering search on every keystroke)
   const [searchInputValue, setSearchInputValue] = useState(searchQuery || '');
+  const [showGroupFilters, setShowGroupFilters] = useState(false);
 
   // Sync local state with prop when it changes externally
   useEffect(() => {
@@ -104,6 +111,17 @@ const ProductListingContent = ({
 
   const handleSortChange = (e) => {
     setSortOption(e.target.value);
+  };
+
+  const handleMultiColumnSortApply = (columns, directions) => {
+    if (setSortColumns && setSortDirections) {
+      setSortColumns(columns);
+      setSortDirections(directions);
+      // Explicitly trigger reload by calling onSortApply if provided
+      if (onSortApply) {
+        onSortApply(columns, directions);
+      }
+    }
   };
 
   const handleToggleAttributeFilters = () => {
@@ -268,43 +286,113 @@ const ProductListingContent = ({
             </div>
           )}
 
-          {/* Group Filter */}
+          {/* Group Filter - Dropdown */}
           {!loadingGroups && groups.length > 0 && (
-            <div className="group-filter">
-              <label htmlFor="group-filter-select" className="control-label">Filter by Release:</label>
-              <select
-                id="group-filter-select"
-                className="group-filter-select"
-                value={selectedGroupId || ''}
-                onChange={(e) => handleGroupFilter ? handleGroupFilter(e.target.value === '' ? null : parseInt(e.target.value)) : setSelectedGroupId(e.target.value === '' ? null : parseInt(e.target.value))}
+            <div className="group-filter-control">
+              <label className="control-label">Filter by Set:</label>
+              <button
+                className="group-filters-toggle"
+                onClick={() => setShowGroupFilters(!showGroupFilters)}
+                disabled={loadingGroups || groups.length === 0}
+                title={loadingGroups ? 'Loading sets...' : groups.length === 0 ? 'No sets available' : 'Filter by set'}
               >
-                <option value="">All Releases</option>
-                {groups.map((group) => {
-                  const groupId = group.group_id || group.groupId || group.id;
-                  const groupName = group.name || `Group ${groupId}`;
-                  return (
-                    <option key={groupId} value={groupId}>{groupName}</option>
-                  );
-                })}
-              </select>
+                <span className="filter-icon">📦</span>
+                <span>Sets</span>
+                {!loadingGroups && groups.length > 0 && selectedGroupIds && selectedGroupIds.length > 0 && (
+                  <span className="active-filters-badge">{selectedGroupIds.length}</span>
+                )}
+              </button>
             </div>
           )}
 
-          {/* Sort Dropdown */}
-          <div className="sort-control">
-            <label htmlFor="sort-select" className="control-label">Sort:</label>
-            <select
-              id="sort-select"
-              className="sort-select"
-              value={sortOption}
-              onChange={handleSortChange}
-            >
-              <option value="name-asc">Name (A-Z)</option>
-              <option value="name-desc">Name (Z-A)</option>
-              <option value="number-asc">Number (Low-High)</option>
-              <option value="number-desc">Number (High-Low)</option>
-            </select>
-          </div>
+          {/* Group Filters Panel */}
+          {groups.length > 0 && showGroupFilters && (
+            <>
+              <div 
+                className="group-filters-overlay"
+                onClick={() => setShowGroupFilters(false)}
+              />
+              <div className="group-filters-panel">
+                <div className="group-filters-panel-header">
+                  <h3 className="filters-panel-title">Filter by Set</h3>
+                  <div className="filters-header-actions">
+                    <button
+                      className="close-filters-button"
+                      onClick={() => setShowGroupFilters(false)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+                <div className="group-filters-panel-content">
+                  <div className="group-checkboxes-container">
+                    {groups.map((group) => {
+                      const groupId = group.group_id || group.groupId || group.id;
+                      const groupName = group.name || `Group ${groupId}`;
+                      const isChecked = selectedGroupIds && selectedGroupIds.includes(groupId);
+                      return (
+                        <label key={groupId} className="group-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={isChecked || false}
+                            onChange={(e) => {
+                              const currentIds = selectedGroupIds || [];
+                              if (e.target.checked) {
+                                setSelectedGroupIds([...currentIds, groupId]);
+                              } else {
+                                setSelectedGroupIds(currentIds.filter(id => id !== groupId));
+                              }
+                            }}
+                            className="group-checkbox"
+                          />
+                          <span>{groupName}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="group-filters-panel-footer">
+                  {selectedGroupIds && selectedGroupIds.length > 0 && (
+                    <button
+                      className="clear-filters-button-footer"
+                      onClick={() => setSelectedGroupIds([])}
+                      aria-label="Clear all set filters"
+                    >
+                      Clear All
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Multi-Column Sort */}
+          {setSortColumns && setSortDirections ? (
+            <div className="sort-control">
+              <label className="control-label">Sort:</label>
+              <MultiColumnSort
+                sortColumns={sortColumns || []}
+                sortDirections={sortDirections || []}
+                onApply={handleMultiColumnSortApply}
+              />
+            </div>
+          ) : (
+            /* Legacy Sort Dropdown */
+            <div className="sort-control">
+              <label htmlFor="sort-select" className="control-label">Sort:</label>
+              <select
+                id="sort-select"
+                className="sort-select"
+                value={sortOption}
+                onChange={handleSortChange}
+              >
+                <option value="name-asc">Name (A-Z)</option>
+                <option value="name-desc">Name (Z-A)</option>
+                <option value="number-asc">Number (Low-High)</option>
+                <option value="number-desc">Number (High-Low)</option>
+              </select>
+            </div>
+          )}
 
           {/* Attribute Filters Button */}
           {(categoryKeys.length > 0 || loadingAttributes) && (
@@ -322,6 +410,21 @@ const ProductListingContent = ({
                 {!loadingAttributes && categoryKeys.length > 0 && totalSelectedFilters > 0 && (
                   <span className="active-filters-badge">{totalSelectedFilters}</span>
                 )}
+              </button>
+            </div>
+          )}
+
+          {/* Refresh Button - Rightmost */}
+          {onRefresh && (
+            <div className="refresh-control">
+              <button
+                className="attribute-filters-toggle"
+                onClick={onRefresh}
+                disabled={loading}
+                title="Refresh products"
+                aria-label="Refresh products"
+              >
+                <span className="refresh-icon">🔄</span>
               </button>
             </div>
           )}

@@ -7,7 +7,7 @@ import { useTCGPercentage } from '../contexts/TCGPercentageContext';
 import { getFavorites, toggleFavorite } from '../lib/favorites';
 import { getUserInventory } from '../lib/inventory';
 import { fetchDeckList, createDeckList, updateDeckListName, updateDeckListItems, deleteDeckListItems, fetchCategoryRules } from '../lib/api';
-import { fetchGroupsByCategory, fetchProductExtendedDataKeyValues, filterProducts, searchProducts, fetchProductsBulk, extractExtendedDataFromProduct, fetchCurrentPricesBulk } from '../lib/api';
+import { fetchGroupsByCategory, fetchProductExtendedDataKeyValues, filterProducts, searchProducts, extractExtendedDataFromProduct, fetchCurrentPricesBulk } from '../lib/api';
 import { parseImportText, fetchProductsByCardNumbers, matchProductsToImportLines } from '../lib/importUtils';
 import { calculateDelta as calculateDeltaUtil } from '../lib/deltaUtils';
 import { applyImportExact, getMergedItems } from '../lib/stagingUtils';
@@ -44,7 +44,7 @@ const DeckBuilderPage = () => {
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [groups, setGroups] = useState([]);
-  const [selectedGroupId, setSelectedGroupId] = useState(null);
+  const [selectedGroupIds, setSelectedGroupIds] = useState([]);
   const [categoryKeys, setCategoryKeys] = useState([]);
   const [attributeFilters, setAttributeFilters] = useState({});
   const [pendingAttributeFilters, setPendingAttributeFilters] = useState({});
@@ -53,10 +53,12 @@ const DeckBuilderPage = () => {
   const [collapsedAttributeGroups, setCollapsedAttributeGroups] = useState({});
   const [categoryAttributesCache, setCategoryAttributesCache] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortOption, setSortOption] = useState('name-asc');
+  const [sortOption, setSortOption] = useState('name-asc'); // Legacy support
+  const [sortColumns, setSortColumns] = useState([]);
+  const [sortDirections, setSortDirections] = useState([]);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [favorites, setFavorites] = useState(new Set());
-  const [showInDeckOnly, setShowInDeckOnly] = useState(false);
+  const [showInDeckOnly, setShowInDeckOnly] = useState(true); // Default to true in deck builder mode
   const [showOwnedOnly, setShowOwnedOnly] = useState(false);
   const [inventory, setInventory] = useState({}); // { product_id: quantity } map
   const [isUpdatingDeck, setIsUpdatingDeck] = useState(false);
@@ -134,6 +136,35 @@ const DeckBuilderPage = () => {
       order: option?.includes('desc') ? 'desc' : 'asc'
     };
   };
+
+  // Get sort parameters for API (supports both legacy and new multi-column format)
+  // Accepts optional override parameters to bypass state (useful when state hasn't updated yet)
+  const getAPISortParams = useCallback((overrideColumns = null, overrideDirections = null) => {
+    // If override parameters are provided, use them
+    if (overrideColumns && overrideColumns.length > 0) {
+      return {
+        sort_columns: overrideColumns,
+        sort_direction: overrideDirections && overrideDirections.length === overrideColumns.length
+          ? overrideDirections
+          : overrideColumns.map(() => 'asc')
+      };
+    }
+    // If multi-column sort is active, use it
+    if (sortColumns && sortColumns.length > 0) {
+      return {
+        sort_columns: sortColumns,
+        sort_direction: sortDirections.length === sortColumns.length 
+          ? sortDirections 
+          : sortColumns.map(() => 'asc')
+      };
+    }
+    // Otherwise, fall back to legacy single-column sort
+    const { field, order } = getSortParams(sortOption);
+    return {
+      sort_by: field,
+      sort_order: order
+    };
+  }, [sortColumns, sortDirections, sortOption]);
   
   // History for undo functionality
   const [history, setHistory] = useState([]);
@@ -228,9 +259,11 @@ const DeckBuilderPage = () => {
       // Load products with current filters (initial load) only in edit mode
       if (canEdit && !loadingProductsRef.current) {
         const initialFilterParams = JSON.stringify({
-          group_id: selectedGroupId,
+          group_ids: JSON.stringify(selectedGroupIds || []),
           filters: attributeFilters,
-          sortOption: sortOption
+          sortOption: sortOption,
+          sortColumns: sortColumns || [],
+          sortDirections: sortDirections || []
         });
         lastFilterParamsRef.current = initialFilterParams;
         setCurrentPage(1);
@@ -249,9 +282,11 @@ const DeckBuilderPage = () => {
     
     // Only reload products when filters actually change
     const currentFilterParams = JSON.stringify({
-      group_id: selectedGroupId,
+      group_ids: JSON.stringify(selectedGroupIds || []),
       filters: attributeFilters,
-      sortOption: sortOption
+      sortOption: sortOption,
+      sortColumns: sortColumns || [],
+      sortDirections: sortDirections || []
     });
     
     if (canEdit && currentFilterParams !== lastFilterParamsRef.current && !loadingProductsRef.current) {
@@ -261,10 +296,98 @@ const DeckBuilderPage = () => {
     } else if (!canEdit) {
       setHasMorePages(false);
     }
-  }, [selectedGroupId, attributeFilters, sortOption, deckList?.category_id, canEdit]);
+  }, [selectedGroupIds, attributeFilters, sortOption, deckList?.category_id, canEdit]);
+
+  // Extract extended data from products (now included in product objects)
+  // Defined before loadDeckProductsForIds that uses it
+  const loadProductExtendedData = useCallback((products) => {
+    const extendedDataMap = {};
+    
+    products.forEach(product => {
+      const productId = String(product.product_id || product.id);
+      const extendedData = extractExtendedDataFromProduct(product);
+      if (Array.isArray(extendedData) && extendedData.length > 0) {
+        extendedDataMap[productId] = extendedData;
+      }
+    });
+    
+    setProductExtendedData(prev => ({ ...prev, ...extendedDataMap }));
+  }, []);
+
+  // Load deck products function - defined before useEffect that uses it
+  const loadDeckProductsForIds = useCallback(async (productIds) => {
+    if (productIds.length === 0) {
+      setDeckProducts([]);
+      return;
+    }
+    if (loadingDeckProductsRef.current) return;
+    if (!deckList || !deckList.category_id) return;
+
+    try {
+      loadingDeckProductsRef.current = true;
+      // Get current sort parameters to preserve sort order
+      const apiSortParams = getAPISortParams();
+      
+      // Fetch in batches of 1000 using filterProducts
+      const batches = [];
+      for (let i = 0; i < productIds.length; i += 1000) {
+        batches.push(productIds.slice(i, i + 1000));
+      }
+      
+      const allProducts = [];
+      for (const batch of batches) {
+        const filterParams = {
+          category_id: deckList.category_id,
+          product_ids: batch,
+          ...apiSortParams, // Include sort parameters to preserve API sort order
+          page: 1,
+          limit: 1000
+        };
+        const response = await filterProducts(filterParams);
+        let batchProducts = [];
+        if (response && typeof response === 'object') {
+          if (response.data && Array.isArray(response.data)) {
+            batchProducts = response.data;
+          } else if (response.products && Array.isArray(response.products)) {
+            batchProducts = response.products;
+          } else if (response.results && Array.isArray(response.results)) {
+            batchProducts = response.results;
+          } else if (Array.isArray(response)) {
+            batchProducts = response;
+          }
+        }
+        allProducts.push(...batchProducts);
+      }
+      
+      setDeckProducts(allProducts);
+      // Extract extended data from products (now included in product objects)
+      loadProductExtendedData(allProducts);
+      
+      // Fetch prices for all deck products and merge with existing prices
+      if (allProducts.length > 0) {
+        const productIdsForPrices = allProducts
+          .map(p => p.product_id || p.id)
+          .filter(id => id !== undefined && id !== null);
+        
+        if (productIdsForPrices.length > 0) {
+          try {
+            const prices = await fetchCurrentPricesBulk(productIdsForPrices);
+            setProductPrices(prev => ({ ...prev, ...prices }));
+          } catch (err) {
+            console.error('Error loading prices for deck products:', err);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error loading deck products:', err);
+      setDeckProducts([]);
+    } finally {
+      loadingDeckProductsRef.current = false;
+    }
+  }, [deckList, getAPISortParams, loadProductExtendedData]);
 
   useEffect(() => {
-    // Load deck products whenever deck items change (including staged changes)
+    // Load deck products whenever deck items change (including staged changes) or sort parameters change
     // But debounce to avoid excessive API calls when rapidly adding/removing cards
     if (loadingDeckProductsRef.current) return;
     
@@ -276,15 +399,23 @@ const DeckBuilderPage = () => {
       .sort((a, b) => a - b); // Sort for consistent comparison
     
     const productIdsKey = productIds.join(',');
+    // Also track sort parameters to reload when sort changes
+    const sortKey = JSON.stringify({ 
+      sortColumns: sortColumns || [], 
+      sortDirections: sortDirections || [],
+      sortOption 
+    });
+    const combinedKey = `${productIdsKey}|${sortKey}`;
     
-    // Only reload if product IDs actually changed
-    if (productIdsKey !== lastProductIdsRef.current) {
-      lastProductIdsRef.current = productIdsKey;
+    // Reload if product IDs changed OR sort parameters changed
+    if (combinedKey !== lastProductIdsRef.current) {
+      lastProductIdsRef.current = combinedKey;
       isUpdatingDeckProductsRef.current = true;
       
       // Debounce the API call slightly to batch rapid changes
       const timeoutId = setTimeout(async () => {
         if (productIds.length > 0) {
+          // Load deck products with current sort parameters to preserve sort order
           await loadDeckProductsForIds(productIds);
         } else {
           setDeckProducts([]);
@@ -300,7 +431,7 @@ const DeckBuilderPage = () => {
         isUpdatingDeckProductsRef.current = false;
       };
     }
-  }, [deckItems, stagedDeckItems]);
+  }, [deckItems, stagedDeckItems, sortColumns, sortDirections, sortOption, loadDeckProductsForIds]);
 
   // Client-side filtering
   useEffect(() => {
@@ -367,27 +498,33 @@ const DeckBuilderPage = () => {
       });
     }
 
-    // Sort
-    filtered.sort((a, b) => {
-      if (sortOption === 'name-asc' || sortOption === 'name-desc') {
-        const aName = (a.name || '').toLowerCase();
-        const bName = (b.name || '').toLowerCase();
-        return sortOption === 'name-desc'
-          ? bName.localeCompare(aName)
-          : aName.localeCompare(bName);
-      }
-      if (sortOption === 'number-asc' || sortOption === 'number-desc') {
-        const aNum = getProductNumberValue(a);
-        const bNum = getProductNumberValue(b);
-        if (!aNum && !bNum) return 0;
-        if (!aNum) return sortOption === 'number-asc' ? 1 : -1;
-        if (!bNum) return sortOption === 'number-asc' ? -1 : 1;
-        return sortOption === 'number-desc'
-          ? bNum.localeCompare(aNum, undefined, { numeric: true, sensitivity: 'base' })
-          : aNum.localeCompare(bNum, undefined, { numeric: true, sensitivity: 'base' });
-      }
-      return 0;
-    });
+    // Sort - only apply client-side sorting if NOT using multi-column API sort
+    // When using multi-column sort (sortColumns.length > 0), the API already sorted the products
+    // so we should preserve that order
+    if (!sortColumns || sortColumns.length === 0) {
+      // Legacy single-column client-side sorting
+      filtered.sort((a, b) => {
+        if (sortOption === 'name-asc' || sortOption === 'name-desc') {
+          const aName = (a.name || '').toLowerCase();
+          const bName = (b.name || '').toLowerCase();
+          return sortOption === 'name-desc'
+            ? bName.localeCompare(aName)
+            : aName.localeCompare(bName);
+        }
+        if (sortOption === 'number-asc' || sortOption === 'number-desc') {
+          const aNum = getProductNumberValue(a);
+          const bNum = getProductNumberValue(b);
+          if (!aNum && !bNum) return 0;
+          if (!aNum) return sortOption === 'number-asc' ? 1 : -1;
+          if (!bNum) return sortOption === 'number-asc' ? -1 : 1;
+          return sortOption === 'number-desc'
+            ? bNum.localeCompare(aNum, undefined, { numeric: true, sensitivity: 'base' })
+            : aNum.localeCompare(bNum, undefined, { numeric: true, sensitivity: 'base' });
+        }
+        return 0;
+      });
+    }
+    // If using multi-column sort, products are already sorted by the API, so we preserve that order
 
     setFilteredProducts(filtered);
     
@@ -400,6 +537,8 @@ const DeckBuilderPage = () => {
       showOwnedOnly,
       shouldFilterToDeck,
       sortOption,
+      sortColumns: JSON.stringify(sortColumns || []),
+      sortDirections: JSON.stringify(sortDirections || []),
       attributeFilters: JSON.stringify(attributeFilters), // Stringify for comparison
       productsLength: products.length,
       deckProductsLength: deckProducts.length
@@ -423,6 +562,8 @@ const DeckBuilderPage = () => {
       currentFilterState.showInDeckOnly !== prevState.showInDeckOnly ||
       currentFilterState.showOwnedOnly !== prevState.showOwnedOnly ||
       currentFilterState.sortOption !== prevState.sortOption ||
+      currentFilterState.sortColumns !== prevState.sortColumns ||
+      currentFilterState.sortDirections !== prevState.sortDirections ||
       currentFilterState.attributeFilters !== prevState.attributeFilters ||
       currentFilterState.shouldFilterToDeck !== prevState.shouldFilterToDeck ||
       (currentFilterState.shouldFilterToDeck && 
@@ -571,55 +712,6 @@ const DeckBuilderPage = () => {
     }
   };
 
-  const loadDeckProductsForIds = async (productIds) => {
-    if (productIds.length === 0) {
-      setDeckProducts([]);
-      return;
-    }
-    if (loadingDeckProductsRef.current) return;
-
-    try {
-      loadingDeckProductsRef.current = true;
-      // Fetch in batches of 1000
-      const batches = [];
-      for (let i = 0; i < productIds.length; i += 1000) {
-        batches.push(productIds.slice(i, i + 1000));
-      }
-      
-      const allProducts = [];
-      for (const batch of batches) {
-        const batchProducts = await fetchProductsBulk(batch);
-        allProducts.push(...batchProducts);
-      }
-      
-      setDeckProducts(allProducts);
-      // Extract extended data from products (now included in product objects)
-      loadProductExtendedData(allProducts);
-      
-      // Fetch prices for all deck products and merge with existing prices
-      if (allProducts.length > 0) {
-        const productIds = allProducts
-          .map(p => p.product_id || p.id)
-          .filter(id => id !== undefined && id !== null);
-        
-        if (productIds.length > 0) {
-          try {
-            const prices = await fetchCurrentPricesBulk(productIds);
-            // Merge with existing prices instead of replacing
-            setProductPrices(prev => ({ ...prev, ...prices }));
-          } catch (err) {
-            console.error('Error loading prices:', err);
-            // Don't clear all prices on error, just log it
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Error loading deck products:', err);
-      setDeckProducts([]);
-    } finally {
-      loadingDeckProductsRef.current = false;
-    }
-  };
 
   // Fetch currency conversion rates (load when component mounts or when currency changes)
 
@@ -668,7 +760,7 @@ const DeckBuilderPage = () => {
     return `${symbol}${convertedValue.toFixed(2)}`;
   };
 
-  const loadProducts = async (page = 1, append = false) => {
+  const loadProducts = async (page = 1, append = false, overrideSortColumns = null, overrideSortDirections = null) => {
     if (!deckList || !deckList.category_id) return;
     if (loadingProductsRef.current && !append) return; // Allow loading more pages
 
@@ -751,21 +843,35 @@ const DeckBuilderPage = () => {
         }
         
         if (productIds.size > 0) {
-          // Fetch all products at once using bulk endpoint
+          // Fetch all products at once using filter endpoint with product_ids
           const productIdsArray = Array.from(productIds);
-          productsData = await fetchProductsBulk(productIdsArray);
-          total = productsData.length;
-          pageNum = 1;
-          hasMore = false; // We loaded everything, no more pages
+          const apiSortParams = getAPISortParams(overrideSortColumns, overrideSortDirections);
+          const filterParams = {
+            category_id: deckList.category_id,
+            product_ids: productIdsArray,
+            ...apiSortParams,
+            page: 1,
+            limit: 1000 // Use max limit to get all products at once
+          };
           
-          // Filter by category if needed (products from bulk may not be filtered by category)
-          if (deckList.category_id) {
-            const categoryIdInt = deckList.category_id;
-            productsData = productsData.filter(p => {
-              const productCategoryId = p.category_id || p.categoryId;
-              return productCategoryId === categoryIdInt;
-            });
-            total = productsData.length;
+          const response = await filterProducts(filterParams);
+          
+          if (response && typeof response === 'object') {
+            // Extract products - API returns data in 'data' field per PaginatedResponse contract
+            if (response.data && Array.isArray(response.data)) {
+              productsData = response.data;
+            } else if (response.products && Array.isArray(response.products)) {
+              productsData = response.products;
+            } else if (response.results && Array.isArray(response.results)) {
+              productsData = response.results;
+            } else if (Array.isArray(response)) {
+              productsData = response;
+            }
+            
+            // Extract pagination info
+            total = response.total !== null && response.total !== undefined ? response.total : productsData.length;
+            pageNum = 1;
+            hasMore = false; // We loaded everything, no more pages
           }
         } else {
           // No products match the filter
@@ -777,13 +883,12 @@ const DeckBuilderPage = () => {
         // Normal pagination flow using filter endpoint
         // When searching, use a larger page size to reduce network calls
         const pageLimit = searchQuery && searchQuery.trim() ? 1000 : 64;
-        const { field: sortField, order: sortOrder } = getSortParams(sortOption);
+        const apiSortParams = getAPISortParams(overrideSortColumns, overrideSortDirections);
         const filterParams = {
           category_id: deckList.category_id,
-          group_id: selectedGroupId,
+          group_id: selectedGroupIds && selectedGroupIds.length > 0 ? selectedGroupIds : undefined,
           filters: attributeFilters,
-          sort_by: sortField,
-          sort_order: sortOrder,
+          ...apiSortParams,
           page: page,
           limit: pageLimit  // Use larger limit when searching
         };
@@ -1515,9 +1620,6 @@ const DeckBuilderPage = () => {
     }
   };
 
-  const handleGroupFilter = (groupId) => {
-    setSelectedGroupId(groupId);
-  };
 
   const handleAttributeFilter = (key, value) => {
     // Update pending filters instead of applying immediately
@@ -1753,20 +1855,6 @@ const DeckBuilderPage = () => {
     }
   };
 
-  // Extract extended data from products (now included in product objects)
-  const loadProductExtendedData = (products) => {
-    const extendedDataMap = {};
-    
-    products.forEach(product => {
-      const productId = String(product.product_id || product.id);
-      const extendedData = extractExtendedDataFromProduct(product);
-      if (Array.isArray(extendedData) && extendedData.length > 0) {
-        extendedDataMap[productId] = extendedData;
-      }
-    });
-    
-    setProductExtendedData(prev => ({ ...prev, ...extendedDataMap }));
-  };
 
   // Get rarity from product extended data
   const getRarity = (product) => {
@@ -2503,14 +2591,18 @@ const DeckBuilderPage = () => {
               setSearchQuery={setSearchQuery}
               sortOption={sortOption}
               setSortOption={setSortOption}
+              sortColumns={sortColumns}
+              setSortColumns={setSortColumns}
+              sortDirections={sortDirections}
+              setSortDirections={setSortDirections}
               showFavoritesOnly={showFavoritesOnly}
               setShowFavoritesOnly={setShowFavoritesOnly}
               showOwnedOnly={showOwnedOnly}
               setShowOwnedOnly={setShowOwnedOnly}
               showInDeckOnly={showInDeckOnly}
               setShowInDeckOnly={setShowInDeckOnly}
-              selectedGroupId={selectedGroupId}
-              setSelectedGroupId={setSelectedGroupId}
+              selectedGroupIds={selectedGroupIds}
+              setSelectedGroupIds={setSelectedGroupIds}
               attributeFilters={attributeFilters}
               pendingAttributeFilters={pendingAttributeFilters}
               setPendingAttributeFilters={setPendingAttributeFilters}
@@ -2535,6 +2627,10 @@ const DeckBuilderPage = () => {
               hasMorePages={canEdit ? hasMorePages : false}
               onLoadMore={canEdit ? loadMoreProducts : undefined}
               newlyAddedProductIds={newlyAddedProductIds}
+              onRefresh={canEdit ? () => {
+                setCurrentPage(1);
+                loadProducts(1, false);
+              } : undefined}
               
               // User and permissions
               user={user}
@@ -2560,11 +2656,16 @@ const DeckBuilderPage = () => {
               onFavoriteToggle={handleFavoriteToggle}
               onAddToDeck={handleAddToDeck}
               onRemoveFromDeck={handleRemoveFromDeck}
-              handleGroupFilter={handleGroupFilter}
               handleAttributeFilter={handleAttributeFilter}
               handleApplyAttributeFilters={handleApplyAttributeFilters}
               handleClearPendingFilters={handleClearPendingFilters}
               toggleAttributeGroup={toggleAttributeGroup}
+              onSortApply={(columns, directions) => {
+                // Explicitly reload products when sort is applied
+                // Pass sort parameters directly to bypass state that hasn't updated yet
+                setCurrentPage(1);
+                loadProducts(1, false, columns, directions);
+              }}
               
               // Custom render props
               renderProductCardActions={(product, productId, productIdStr, quantity, isFavorited) => {

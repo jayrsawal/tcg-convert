@@ -243,7 +243,7 @@
 }
 
 .product-preview-stat-value {
-  font-size: 28px; /* Reduced from 36px to fit "+" signs better */
+  font-size: 26px; /* Reduced from 36px to fit "+" signs better */
   font-weight: 700;
   color: #4a5568;
   line-height: 1;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RiFileCopyFill } from "react-icons/ri";
-import { fetchDeckLists, fetchAllDeckLists, createDeckList, updateDeckListName, deleteDeckList, fetchDeckList, fetchProductsBulk, extractExtendedDataFromProduct, fetchCurrentPricesBulk, fetchCategoryRules, updateDeckListItems } from '../lib/api';
+import { fetchDeckLists, fetchAllDeckLists, createDeckList, updateDeckListName, deleteDeckList, fetchDeckList, filterProducts, extractExtendedDataFromProduct, fetchCurrentPricesBulk, fetchCategoryRules, updateDeckListItems } from '../lib/api';
 import ExportDeckModal from './ExportDeckModal';
 import NotificationModal from './NotificationModal';
 import ConfirmationModal from './ConfirmationModal';
@@ -69,20 +69,42 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
     }
     
     try {
-      // Skip pricing if skipPricing prop is true (e.g., for landing page)
-      const fetchPromises = [fetchProductsBulk(allProductIds)];
-      if (!skipPricing) {
-        fetchPromises.push(
-          fetchCurrentPricesBulk(allProductIds).catch(err => {
-            console.warn('Failed to fetch prices for decks, continuing without prices:', err);
-            return {};
-          })
-        );
+      // Fetch products in batches using filterProducts
+      const BATCH_SIZE = 1000;
+      const allProducts = [];
+      for (let i = 0; i < allProductIds.length; i += BATCH_SIZE) {
+        const batch = allProductIds.slice(i, i + BATCH_SIZE);
+        const filterParams = {
+          category_id: categoryId,
+          product_ids: batch,
+          page: 1,
+          limit: 1000
+        };
+        const response = await filterProducts(filterParams);
+        let batchProducts = [];
+        if (response && typeof response === 'object') {
+          if (response.data && Array.isArray(response.data)) {
+            batchProducts = response.data;
+          } else if (response.products && Array.isArray(response.products)) {
+            batchProducts = response.products;
+          } else if (response.results && Array.isArray(response.results)) {
+            batchProducts = response.results;
+          } else if (Array.isArray(response)) {
+            batchProducts = response;
+          }
+        }
+        allProducts.push(...batchProducts);
       }
       
-      const results = await Promise.all(fetchPromises);
-      const allProducts = results[0];
-      const allPrices = skipPricing ? {} : results[1];
+      // Fetch prices if needed
+      let allPrices = {};
+      if (!skipPricing) {
+        try {
+          allPrices = await fetchCurrentPricesBulk(allProductIds);
+        } catch (err) {
+          console.warn('Failed to fetch prices for decks, continuing without prices:', err);
+        }
+      }
       
       // Create a map of productId to product for quick lookup
       const productMap = {};
@@ -425,10 +447,29 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
 
       let products = [];
       if (productIds.length > 0) {
-        const batchSize = 50;
+        const deckCategoryId = fullDeck.category_id || categoryId;
+        const batchSize = 1000;
         for (let i = 0; i < productIds.length; i += batchSize) {
           const batch = productIds.slice(i, i + batchSize);
-          const batchProducts = await fetchProductsBulk(batch);
+          const filterParams = {
+            category_id: deckCategoryId,
+            product_ids: batch,
+            page: 1,
+            limit: 1000
+          };
+          const response = await filterProducts(filterParams);
+          let batchProducts = [];
+          if (response && typeof response === 'object') {
+            if (response.data && Array.isArray(response.data)) {
+              batchProducts = response.data;
+            } else if (response.products && Array.isArray(response.products)) {
+              batchProducts = response.products;
+            } else if (response.results && Array.isArray(response.results)) {
+              batchProducts = response.results;
+            } else if (Array.isArray(response)) {
+              batchProducts = response;
+            }
+          }
           products.push(...batchProducts);
         }
       }

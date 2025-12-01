@@ -30,6 +30,42 @@ def _extract_rarity_from_extended(ext_data: Optional[List[Dict[str, Any]]]) -> O
 from mock_utils import dump_data_examples
 
 
+def _get_extended_value(ext_data: List[Dict[str, Any]], keys: List[str]) -> Optional[str]:
+    """Return the first extended-data value matching any of the provided keys."""
+    target = {key.strip().lower() for key in keys}
+    for entry in ext_data or []:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name") or entry.get("displayName")
+        if not name:
+            continue
+        if name.strip().lower() in target:
+            value = entry.get("value")
+            if value is None:
+                return None
+            return str(value).strip()
+    return None
+
+
+def _parse_int(value: Optional[str]) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_short_number(number_str: Optional[str]) -> Optional[int]:
+    if not number_str:
+        return None
+    parts = number_str.split("-")
+    if not parts:
+        return None
+    candidate = parts[-1]
+    return _parse_int(candidate)
+
+
 def _normalize_timestamp(timestamp_str: Optional[str]) -> Optional[datetime]:
     """Normalize various timestamp formats to datetime object."""
     if not timestamp_str:
@@ -86,6 +122,12 @@ def parse_products_json(json_data: Dict[str, Any], category_id: int, group_id: i
         ext_data = item.get("extendedData", [])
         extended_data_raw = json.dumps(ext_data) if ext_data else None
         rarity_value = _extract_rarity_from_extended(ext_data)
+        card_type = _get_extended_value(ext_data, ["CardType", "Card Type"])
+        level_value = _parse_int(_get_extended_value(ext_data, ["Level"]))
+        cost_value = _parse_int(_get_extended_value(ext_data, ["Cost"]))
+        atk_value = _parse_int(_get_extended_value(ext_data, ["Attack Points"]))
+        hp_value = _parse_int(_get_extended_value(ext_data, ["Hit Points"]))
+        color_value = _get_extended_value(ext_data, ["Color"])
         
         def get_int(key: str) -> Optional[int]:
             value = item.get(key)
@@ -96,6 +138,9 @@ def parse_products_json(json_data: Dict[str, Any], category_id: int, group_id: i
             except (ValueError, TypeError):
                 return None
         
+        number_value = _get_extended_value(ext_data, ["Number"])
+        short_number = _extract_short_number(number_value)
+
         product = {
             "product_id": item.get("productId"),
             "category_id": category_id,
@@ -104,12 +149,19 @@ def parse_products_json(json_data: Dict[str, Any], category_id: int, group_id: i
             "clean_name": get_string("cleanName"),
             "image_url": get_string("imageUrl"),
             "url": get_string("url"),
-            "number": get_string("number"),
+            "number": number_value,
             "fixed_amount": get_int("fixedAmount"),
             "modified_on": modified_on.isoformat() if modified_on else None,
             "raw": json.dumps(item),
             "extended_data_raw": extended_data_raw,
-            "rarity": rarity_value
+            "rarity": rarity_value,
+            "type": card_type,
+            "level": level_value,
+            "cost": cost_value,
+            "atk": atk_value,
+            "hp": hp_value,
+            "color": color_value,
+            "short_number": short_number,
         }
         products.append(product)
         

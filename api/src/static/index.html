@@ -561,7 +561,22 @@
                     <span class="endpoint-path">/products</span>
                 </div>
                 <div class="endpoint-description">
-                    List all products with pagination. Results are sorted by name, then by product_id. Each product includes a <code>number</code> field from extended data.
+                    List all products with pagination. Results are sorted by the specified columns (default: color, type, rarity, level, cost in ascending order). Each product includes cached fields (<code>color</code>, <code>type</code>, <code>level</code>, <code>cost</code>, <code>atk</code>, <code>hp</code>, <code>rarity</code>) and a <code>number</code> field from extended data.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">page</span> <span class="param-type">(int, optional, default: 1)</span> - Page number
+                    </div>
+                    <div class="param">
+                        <span class="param-name">limit</span> <span class="param-type">(int, optional, default: 100, max: 1000)</span> - Number of items per page
+                    </div>
+                    <div class="param">
+                        <span class="param-name">sort_columns</span> <span class="param-type">(array of strings, optional, default: ["color", "type", "rarity", "level", "cost"])</span> - List of column names to sort by (in order)
+                    </div>
+                    <div class="param">
+                        <span class="param-name">sort_direction</span> <span class="param-type">(string or array of strings, optional, default: "asc")</span> - Sort direction: "asc" or "desc", or a list of directions (one per column in sort_columns). If a list, length must match sort_columns length.
+                    </div>
                 </div>
                 <div class="response-schema">
                     <h4>Response Schema:</h4>
@@ -581,6 +596,13 @@
                             <span class="schema-field-name">raw</span> <span class="schema-field-type">jsonb (default: {})</span><br>
                             <span class="schema-field-name">fixed_amount</span> <span class="schema-field-type">integer | null</span><br>
                             <span class="schema-field-name">number</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">rarity</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">color</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">type</span> <span class="schema-field-type">text | null</span><br>
+                            <span class="schema-field-name">level</span> <span class="schema-field-type">integer | null</span><br>
+                            <span class="schema-field-name">cost</span> <span class="schema-field-type">integer | null</span><br>
+                            <span class="schema-field-name">atk</span> <span class="schema-field-type">integer | null</span><br>
+                            <span class="schema-field-name">hp</span> <span class="schema-field-type">integer | null</span><br>
                             <span class="schema-field-name">extended_data_raw</span> <span class="schema-field-type">jsonb | null (raw JSON string)</span>
                         </div>
                     </div>
@@ -602,6 +624,13 @@
       "raw": {},
       "fixed_amount": null,
       "number": "025",
+      "rarity": "Common",
+      "color": "Yellow",
+      "type": "Electric",
+      "level": null,
+      "cost": 1,
+      "atk": 20,
+      "hp": 60,
       "extended_data_raw": "{\"Rarity\": \"Common\", \"Number\": \"025\", \"Type\": \"Electric\"}"
     }
   ],
@@ -619,7 +648,7 @@
                     <span class="endpoint-path">/products/search</span>
                 </div>
                 <div class="endpoint-description">
-                    Search products by partial name matching. Performs case-insensitive partial matching on product names. Results are sorted by name, then by product_id and support pagination.
+                    Search products by partial name matching. Performs case-insensitive partial matching on product names. Results are sorted by the specified columns (default: color, type, rarity, level, cost in ascending order).
                 </div>
                 <div class="endpoint-params">
                     <h4>Query Parameters:</h4>
@@ -631,6 +660,12 @@
                     </div>
                     <div class="param">
                         <span class="param-name">limit</span> <span class="param-type">(int, optional, default: 100, max: 1000)</span> - Number of items per page
+                    </div>
+                    <div class="param">
+                        <span class="param-name">sort_columns</span> <span class="param-type">(array of strings, optional, default: ["color", "type", "rarity", "level", "cost"])</span> - List of column names to sort by (in order)
+                    </div>
+                    <div class="param">
+                        <span class="param-name">sort_direction</span> <span class="param-type">(string or array of strings, optional, default: "asc")</span> - Sort direction: "asc" or "desc", or a list of directions (one per column in sort_columns). If a list, length must match sort_columns length.
                     </div>
                 </div>
                 <div class="example">
@@ -667,6 +702,13 @@
       "fetched_at": "2024-01-20T08:00:00Z",
       "fixed_amount": null,
       "number": "025",
+      "rarity": "Common",
+      "color": "Yellow",
+      "type": "Electric",
+      "level": null,
+      "cost": 1,
+      "atk": 20,
+      "hp": 60,
       "extended_data_raw": "{\"Rarity\": \"Common\", \"Number\": \"025\", \"Type\": \"Electric\"}"
     },
     {
@@ -681,6 +723,13 @@
       "fetched_at": "2024-01-20T08:00:00Z",
       "fixed_amount": null,
       "number": "188",
+      "rarity": "Rare",
+      "color": "Yellow",
+      "type": "Electric",
+      "level": null,
+      "cost": 3,
+      "atk": 200,
+      "hp": 300,
       "extended_data_raw": "{\"Rarity\": \"Ultra Rare\", \"Number\": \"188\", \"Type\": \"Electric\"}"
     }
   ],
@@ -730,7 +779,22 @@
                     <span class="endpoint-path">/products/by-category/{category_id}</span>
                 </div>
                 <div class="endpoint-description">
-                    Get all products for a specific category. Results are sorted by name (alphabetical), then by product_id and support pagination.
+                    Get all products for a specific category. Results are sorted by the specified columns (default: color, type, rarity, level, cost in ascending order).
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">page</span> <span class="param-type">(int, optional, default: 1)</span> - Page number
+                    </div>
+                    <div class="param">
+                        <span class="param-name">limit</span> <span class="param-type">(int, optional, default: 100, max: 1000)</span> - Number of items per page
+                    </div>
+                    <div class="param">
+                        <span class="param-name">sort_columns</span> <span class="param-type">(array of strings, optional, default: ["color", "type", "rarity", "level", "cost"])</span> - List of column names to sort by (in order)
+                    </div>
+                    <div class="param">
+                        <span class="param-name">sort_direction</span> <span class="param-type">(string or array of strings, optional, default: "asc")</span> - Sort direction: "asc" or "desc", or a list of directions (one per column in sort_columns). If a list, length must match sort_columns length.
+                    </div>
                 </div>
                 <div class="response-schema">
                     <h4>Response Schema:</h4>
@@ -770,7 +834,22 @@
                     <span class="endpoint-path">/products/by-group/{group_id}</span>
                 </div>
                 <div class="endpoint-description">
-                    Get all products for a specific group. Results are sorted by name (alphabetical), then by product_id and support pagination.
+                    Get all products for a specific group. Results are sorted by the specified columns (default: color, type, rarity, level, cost in ascending order).
+                </div>
+                <div class="endpoint-params">
+                    <h4>Query Parameters:</h4>
+                    <div class="param">
+                        <span class="param-name">page</span> <span class="param-type">(int, optional, default: 1)</span> - Page number
+                    </div>
+                    <div class="param">
+                        <span class="param-name">limit</span> <span class="param-type">(int, optional, default: 100, max: 1000)</span> - Number of items per page
+                    </div>
+                    <div class="param">
+                        <span class="param-name">sort_columns</span> <span class="param-type">(array of strings, optional, default: ["color", "type", "rarity", "level", "cost"])</span> - List of column names to sort by (in order)
+                    </div>
+                    <div class="param">
+                        <span class="param-name">sort_direction</span> <span class="param-type">(string or array of strings, optional, default: "asc")</span> - Sort direction: "asc" or "desc", or a list of directions (one per column in sort_columns). If a list, length must match sort_columns length.
+                    </div>
                 </div>
                 <div class="response-schema">
                     <h4>Response Schema:</h4>
@@ -810,7 +889,7 @@
                     <span class="endpoint-path">/products/filter</span>
                 </div>
                 <div class="endpoint-description">
-                    Filter products by extended data key-value pairs, category, and/or group. Different filter keys are combined with AND logic, while multiple values for a single key are combined with OR logic. For example, {"Rarity": ["Common", "Rare"], "Number": "001"} returns products with (Rarity=Common OR Rarity=Rare) AND Number=001. Results can be sorted by name or product_id, ascending or descending.
+                    Filter products by extended data key-value pairs, category, and/or group. Different filter keys are combined with AND logic, while multiple values for a single key are combined with OR logic. For example, {"Rarity": ["Common", "Rare"], "Number": "001"} returns products with (Rarity=Common OR Rarity=Rare) AND Number=001. Results are sorted by the specified columns (default: color, type, rarity, level, cost in ascending order).
                 </div>
                 <div class="endpoint-params">
                     <h4>Query Parameters:</h4>
@@ -831,10 +910,10 @@
                         <span class="param-name">filters</span> <span class="param-type">(object, optional)</span> - Key-value pairs for extended data filtering. Values can be strings or arrays of strings. Multiple values for a key use OR logic, different keys use AND logic.
                     </div>
                     <div class="param">
-                        <span class="param-name">sort_by</span> <span class="param-type">(string, optional, default: "name")</span> - Sort field: "name" or "product_id"
+                        <span class="param-name">sort_columns</span> <span class="param-type">(array of strings, optional, default: ["color", "type", "rarity", "level", "cost"])</span> - List of column names to sort by (in order)
                     </div>
                     <div class="param">
-                        <span class="param-name">sort_order</span> <span class="param-type">(string, optional, default: "asc")</span> - Sort order: "asc" or "desc"
+                        <span class="param-name">sort_direction</span> <span class="param-type">(string or array of strings, optional, default: "asc")</span> - Sort direction: "asc" or "desc", or a list of directions (one per column in sort_columns). If a list, length must match sort_columns length.
                     </div>
                 </div>
                 <div class="example">
@@ -846,8 +925,18 @@
     "Rarity": ["Common", "Rare"],
     "Number": "001"
   },
-  "sort_by": "name",
-  "sort_order": "asc"
+  "sort_columns": ["color", "type", "rarity", "level", "cost"],
+  "sort_direction": "asc"
+}</code>
+                    <h4>Example Request (with per-column sort directions):</h4>
+                    <code><span class="example-url">POST /products/filter?page=1&limit=20</span>
+{
+  "category_id": 1,
+  "filters": {
+    "Rarity": ["Common", "Rare"]
+  },
+  "sort_columns": ["color", "type", "rarity"],
+  "sort_direction": ["asc", "desc", "asc"]
 }</code>
                 </div>
                 <div class="response-schema">
@@ -871,6 +960,13 @@
       "raw": {},
       "fixed_amount": null,
       "number": "001",
+      "rarity": "Common",
+      "color": "Green",
+      "type": "Grass",
+      "level": null,
+      "cost": 1,
+      "atk": 10,
+      "hp": 50,
       "extended_data_raw": "{\"Rarity\": \"Common\", \"Number\": \"001\", \"Type\": \"Grass\"}"
     }
   ],
@@ -878,89 +974,6 @@
   "limit": 20,
   "total": 50,
   "has_more": true
-}</code>
-                </div>
-            </div>
-
-            <div class="endpoint">
-                <div class="endpoint-header">
-                    <span class="method post">POST</span>
-                    <span class="endpoint-path">/products/bulk</span>
-                </div>
-                <div class="endpoint-description">
-                    Get multiple products by their IDs in bulk with pagination. Maximum 1000 product IDs per request. Products that don't exist will not be included in the response. Results are paginated and returned in the order of requested IDs.
-                </div>
-                <div class="endpoint-params">
-                    <h4>Query Parameters:</h4>
-                    <div class="param">
-                        <span class="param-name">page</span> <span class="param-type">(int, optional, default: 1)</span> - Page number
-                    </div>
-                    <div class="param">
-                        <span class="param-name">limit</span> <span class="param-type">(int, optional, default: 100, max: 1000)</span> - Number of items per page
-                    </div>
-                    <h4>Request Body:</h4>
-                    <div class="param">
-                        <span class="param-name">product_ids</span> <span class="param-type">(array[int], required, min: 1, max: 1000)</span> - List of product IDs to fetch
-                    </div>
-                </div>
-                <div class="example">
-                    <h4>Example Request:</h4>
-                    <code><span class="example-url">POST /products/bulk?page=1&limit=100</span>
-{
-  "product_ids": [12345, 67890, 11111]
-}</code>
-                </div>
-                <div class="response-schema">
-                    <h4>Response Schema:</h4>
-                    <code>PaginatedResponse&lt;Product&gt;</code>
-                    <div class="schema-field">
-                        <span class="schema-field-name">PaginatedResponse</span> <span class="schema-field-type">object</span>
-                        <div class="schema-field" style="margin-left: 20px;">
-                            <span class="schema-field-name">data</span> <span class="schema-field-type">array of Product</span><br>
-                            <span class="schema-field-name">page</span> <span class="schema-field-type">integer (required)</span><br>
-                            <span class="schema-field-name">limit</span> <span class="schema-field-type">integer (required)</span><br>
-                            <span class="schema-field-name">total</span> <span class="schema-field-type">integer | null</span><br>
-                            <span class="schema-field-name">has_more</span> <span class="schema-field-type">boolean (required)</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="response">
-                    <h4>Example Response:</h4>
-                    <code>{
-  "data": [
-    {
-      "product_id": 12345,
-      "category_id": 1,
-      "group_id": 1,
-      "name": "Pikachu",
-      "clean_name": "pikachu",
-      "image_url": "https://example.com/pikachu.jpg",
-      "url": "https://tcgplayer.com/product/12345",
-      "modified_on": "2024-01-15T10:30:00Z",
-      "fetched_at": "2024-01-20T08:00:00Z",
-      "fixed_amount": null,
-      "number": "025",
-      "extended_data_raw": "{\"Rarity\": \"Common\", \"Number\": \"025\", \"Type\": \"Electric\"}"
-    },
-    {
-      "product_id": 67890,
-      "category_id": 1,
-      "group_id": 1,
-      "name": "Charizard",
-      "clean_name": "charizard",
-      "image_url": "https://example.com/charizard.jpg",
-      "url": "https://tcgplayer.com/product/67890",
-      "modified_on": "2024-01-15T10:30:00Z",
-      "fetched_at": "2024-01-20T08:00:00Z",
-      "fixed_amount": null,
-      "number": "006",
-      "extended_data_raw": "{\"Rarity\": \"Rare\", \"Number\": \"006\", \"Type\": \"Fire\"}"
-    }
-  ],
-  "page": 1,
-  "limit": 100,
-  "total": 2,
-  "has_more": false
 }</code>
                 </div>
             </div>

@@ -1,5 +1,6 @@
 // Favorites service for managing user favorite products using profiles API
 import { getAuthHeaders as getSupabaseAuthHeaders } from './supabase';
+import { fetchUserProfile } from './api';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || '';
 
@@ -19,21 +20,8 @@ const getAuthHeaders = async () => {
  */
 export const getFavorites = async (userId) => {
   try {
-    const url = API_BASE_URL 
-      ? `${API_BASE_URL}/profiles?user_id=${userId}`
-      : `/profiles?user_id=${userId}`;
-    
-    const headers = await getAuthHeaders();
-    const response = await fetch(url, { headers });
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        return new Set();
-      }
-      throw new Error(`Failed to fetch profile: ${response.status} ${response.statusText}`);
-    }
-
-    const profile = await response.json();
+    // Reuse fetchUserProfile so we share the same cached /profiles call
+    const profile = await fetchUserProfile(userId);
     
     // Extract favorites field from profile object
     // Favorites is a JSON object with product IDs as keys (same structure as items)
@@ -78,7 +66,7 @@ export const toggleFavorite = async (userId, productId, isFavorite = null) => {
     const url = API_BASE_URL 
       ? `${API_BASE_URL}/profiles?user_id=${userId}`
       : `/profiles?user_id=${userId}`;
-    
+
     const headers = await getAuthHeaders();
     
     // If status not provided, fetch it
@@ -87,12 +75,8 @@ export const toggleFavorite = async (userId, productId, isFavorite = null) => {
     }
     
     // Get current profile to get existing favorites
-    const getResponse = await fetch(url, { headers });
-    if (!getResponse.ok) {
-      throw new Error(`Failed to fetch profile: ${getResponse.status} ${getResponse.statusText}`);
-    }
-    
-    const profile = await getResponse.json();
+    // Reuse fetchUserProfile so we share the same cached /profiles call
+    const profile = await fetchUserProfile(userId);
     const currentFavorites = profile.favorites || {};
     const updatedFavorites = { ...currentFavorites };
     const productIdStr = String(productId);

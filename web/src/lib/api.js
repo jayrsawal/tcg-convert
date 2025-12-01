@@ -18,8 +18,10 @@ const getAuthHeaders = async () => {
  * @param {number} params.category_id - Category ID (required, must be an integer)
  * @param {Object} params.filters - Filter object with attribute keys and array values
  * @param {number} [params.group_id] - Optional group ID
- * @param {string} [params.sort_by] - Sort field (e.g., 'name', 'product_id')
- * @param {string} [params.sort_order] - Sort order ('asc' or 'desc')
+ * @param {string} [params.sort_by] - Sort field (e.g., 'name', 'product_id') - DEPRECATED: use sort_columns
+ * @param {string} [params.sort_order] - Sort order ('asc' or 'desc') - DEPRECATED: use sort_direction
+ * @param {string[]} [params.sort_columns] - Array of sort columns (e.g., ['rarity', 'level', 'cost'])
+ * @param {string[]} [params.sort_direction] - Array of sort directions ('asc' or 'desc') for each column
  * @param {number} [params.page] - Page number (default: 1, sent as query parameter)
  * @param {number} [params.limit] - Items per page (default: 50, sent as query parameter)
  * @returns {Promise<Object>} Response with PaginatedResponse structure: { data, page, limit, total, has_more }
@@ -30,10 +32,13 @@ export const filterProducts = async (params = {}) => {
     const {
       category_id,
       filters = {},
-      group_id,
+      group_id, // Can be a single ID or an array of IDs
       numbers,
+      product_ids, // Product IDs (alternative to numbers)
       sort_by,
       sort_order,
+      sort_columns,
+      sort_direction,
       page = 1,
       limit = 50
     } = params;
@@ -67,17 +72,39 @@ export const filterProducts = async (params = {}) => {
 
     // Add optional parameters if provided
     if (group_id !== null && group_id !== undefined) {
-      requestBody.group_id = parseInt(group_id, 10);
+      // group_id can be a single ID or an array of IDs
+      if (Array.isArray(group_id)) {
+        requestBody.group_id = group_id.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+      } else {
+        requestBody.group_id = parseInt(group_id, 10);
+      }
     }
     if (numbers !== null && numbers !== undefined) {
       // numbers can be an array of strings or integers
       requestBody.numbers = Array.isArray(numbers) ? numbers : [numbers];
     }
-    if (sort_by) {
-      requestBody.sort_by = sort_by;
+    if (product_ids !== null && product_ids !== undefined) {
+      // product_ids can be an array of integers
+      requestBody.product_ids = Array.isArray(product_ids) 
+        ? product_ids.map(id => parseInt(id, 10)).filter(id => !isNaN(id))
+        : [parseInt(product_ids, 10)].filter(id => !isNaN(id));
     }
-    if (sort_order) {
-      requestBody.sort_order = sort_order;
+    // Support new multi-column sorting
+    if (sort_columns && Array.isArray(sort_columns) && sort_columns.length > 0) {
+      requestBody.sort_columns = sort_columns;
+      // sort_direction must match length of sort_columns
+      if (sort_direction && Array.isArray(sort_direction) && sort_direction.length === sort_columns.length) {
+        requestBody.sort_direction = sort_direction;
+      } else {
+        // Default to 'asc' for all columns if not provided or mismatched
+        requestBody.sort_direction = sort_columns.map(() => 'asc');
+      }
+    } else if (sort_by) {
+      // Legacy support: single column sorting
+      requestBody.sort_by = sort_by;
+      if (sort_order) {
+        requestBody.sort_order = sort_order;
+      }
     }
 
     // Build URL with query parameters for pagination
@@ -355,20 +382,26 @@ export const fetchCurrentPricesBulk = async (productIds) => {
 /**
  * Fetch product details for multiple products
  * @param {Array<number>} productIds - Array of product IDs
+ * @param {Object} sortParams - Optional sort parameters (sort_columns, sort_direction, sort_by, sort_order)
  * @returns {Promise<Array>} Array of product objects
  */
 // Cache and request deduplication for products bulk
 const productsBulkCache = {};
 const productsBulkPromises = {};
 
-export const fetchProductsBulk = async (productIds) => {
+export const fetchProductsBulk = async (productIds, sortParams = {}) => {
   if (!productIds || productIds.length === 0) {
     return [];
   }
 
-  // Create cache key from sorted product IDs
+  // Create cache key from sorted product IDs and sort parameters
   const sortedIds = [...productIds].sort((a, b) => a - b);
-  const cacheKey = `products_${sortedIds.join(',')}`;
+  const sortKey = sortParams.sort_columns 
+    ? `_sort_${JSON.stringify(sortParams.sort_columns)}_${JSON.stringify(sortParams.sort_direction || [])}`
+    : sortParams.sort_by 
+    ? `_sort_${sortParams.sort_by}_${sortParams.sort_order || 'asc'}`
+    : '';
+  const cacheKey = `products_${sortedIds.join(',')}${sortKey}`;
   
   // Return cached data if available (with longer TTL - 60 seconds for products)
   if (productsBulkCache[cacheKey] && Date.now() - productsBulkCache[cacheKey].timestamp < 60000) {
@@ -382,12 +415,32 @@ export const fetchProductsBulk = async (productIds) => {
 
   try {
     const url = API_BASE_URL ? `${API_BASE_URL}/products/bulk` : '/products/bulk';
+    
+    // Build request body with product IDs and optional sort parameters
+    const requestBody = { product_ids: productIds };
+    
+    // Add sort parameters if provided (same format as filterProducts)
+    if (sortParams.sort_columns && Array.isArray(sortParams.sort_columns) && sortParams.sort_columns.length > 0) {
+      requestBody.sort_columns = sortParams.sort_columns;
+      if (sortParams.sort_direction && Array.isArray(sortParams.sort_direction) && sortParams.sort_direction.length === sortParams.sort_columns.length) {
+        requestBody.sort_direction = sortParams.sort_direction;
+      } else {
+        requestBody.sort_direction = sortParams.sort_columns.map(() => 'asc');
+      }
+    } else if (sortParams.sort_by) {
+      // Legacy support: single column sorting
+      requestBody.sort_by = sortParams.sort_by;
+      if (sortParams.sort_order) {
+        requestBody.sort_order = sortParams.sort_order;
+      }
+    }
+    
     const fetchPromise = fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ product_ids: productIds }),
+      body: JSON.stringify(requestBody),
     }).then(async (response) => {
       if (!response.ok) {
         throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`);
@@ -566,53 +619,40 @@ export const getUserInventory = async (userId) => {
   try {
     const cacheKey = `profile_${userId}`;
     
-    // Return cached data if available (with longer TTL - 30 seconds)
+    // Return cached inventory if available (30s TTL)
     if (profileCache[cacheKey] && Date.now() - profileCache[cacheKey].timestamp < 30000) {
       return profileCache[cacheKey].data;
     }
     
-    // If there's already an in-flight request, return that promise
+    // If there's already an in-flight inventory request, return that promise
     if (profilePromises[cacheKey]) {
       return await profilePromises[cacheKey];
     }
-    
-    const url = API_BASE_URL 
-      ? `${API_BASE_URL}/profiles/?user_id=${userId}`
-      : `/profiles/?user_id=${userId}`;
-    
-    const headers = await getAuthHeaders();
-    const fetchPromise = fetch(url, { headers }).then(async (response) => {
-      if (!response.ok) {
-        if (response.status === 404) {
-          return {};
-        }
-        throw new Error(`Failed to fetch profile: ${response.status} ${response.statusText}`);
-      }
 
-      const profile = await response.json();
-      
-      // Extract items field from profile object
-      let inventoryMap = {};
-      if (profile && typeof profile === 'object' && profile.items) {
-        Object.entries(profile.items).forEach(([productId, quantity]) => {
-          inventoryMap[String(productId)] = quantity;
-        });
-      }
-      
-      // Cache the result
-      profileCache[cacheKey] = { data: inventoryMap, timestamp: Date.now() };
-      return inventoryMap;
-    }).catch((error) => {
-      console.error('Error fetching user inventory:', error);
-      return {};
-    }).finally(() => {
-      // Remove from in-flight promises
-      delete profilePromises[cacheKey];
-    });
-    
-    // Store the promise to deduplicate concurrent requests
+    // Reuse fetchUserProfile so we only hit /profiles once per userId
+    const fetchPromise = fetchUserProfile(userId)
+      .then((profile) => {
+        // Extract items field from profile object
+        let inventoryMap = {};
+        if (profile && typeof profile === 'object' && profile.items) {
+          Object.entries(profile.items).forEach(([productId, quantity]) => {
+            inventoryMap[String(productId)] = quantity;
+          });
+        }
+        
+        // Cache the inventory result
+        profileCache[cacheKey] = { data: inventoryMap, timestamp: Date.now() };
+        return inventoryMap;
+      })
+      .catch((error) => {
+        console.error('Error fetching user inventory:', error);
+        return {};
+      })
+      .finally(() => {
+        delete profilePromises[cacheKey];
+      });
+
     profilePromises[cacheKey] = fetchPromise;
-    
     return await fetchPromise;
   } catch (error) {
     console.error('Error fetching user inventory:', error);
@@ -1337,25 +1377,66 @@ export const fetchGroupsByCategory = async (categoryId) => {
 /**
  * Fetch user profile
  * @param {string} userId - User ID (UUID)
- * @returns {Promise<Object>} Profile object
+ * @returns {Promise<Object|null>} Profile object or null if not found
+ *
+ * This function is heavily used across contexts and components
+ * (currency, TCG percentage, navigation bar, profile page, etc.),
+ * so we add caching and in-flight request deduplication to avoid
+ * multiple `/profiles/?user_id=...` calls on initial page load.
  */
+const userProfileCache = {};
+const userProfilePromises = {};
+
 export const fetchUserProfile = async (userId) => {
+  if (!userId) {
+    return null;
+  }
+
   try {
+    const cacheKey = `user_profile_${userId}`;
+
+    // Return cached profile if it's still fresh (30s TTL)
+    if (userProfileCache[cacheKey] && Date.now() - userProfileCache[cacheKey].timestamp < 30000) {
+      return userProfileCache[cacheKey].data;
+    }
+
+    // If there's already an in-flight request, return that promise
+    if (userProfilePromises[cacheKey]) {
+      return await userProfilePromises[cacheKey];
+    }
+
     const url = API_BASE_URL 
       ? `${API_BASE_URL}/profiles/?user_id=${userId}`
       : `/profiles/?user_id=${userId}`;
     
     const headers = await getAuthHeaders();
-    const response = await fetch(url, { headers });
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        return null;
-      }
-      throw new Error(`Failed to fetch profile: ${response.status} ${response.statusText}`);
-    }
+    const fetchPromise = fetch(url, { headers })
+      .then(async (response) => {
+        if (!response.ok) {
+          if (response.status === 404) {
+            return null;
+          }
+          throw new Error(`Failed to fetch profile: ${response.status} ${response.statusText}`);
+        }
 
-    return await response.json();
+        const profile = await response.json();
+        // Cache the profile
+        userProfileCache[cacheKey] = { data: profile, timestamp: Date.now() };
+        return profile;
+      })
+      .catch((error) => {
+        console.error('Error fetching user profile:', error);
+        // On error, don't cache; just rethrow so callers can handle
+        throw error;
+      })
+      .finally(() => {
+        delete userProfilePromises[cacheKey];
+      });
+
+    // Store the in-flight promise for deduplication
+    userProfilePromises[cacheKey] = fetchPromise;
+    return await fetchPromise;
   } catch (error) {
     console.error('Error fetching user profile:', error);
     throw error;

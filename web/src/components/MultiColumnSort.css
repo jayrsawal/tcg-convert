@@ -1,0 +1,310 @@
+.multi-column-sort {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  height: 100%;
+}
+
+.sort-icon {
+  font-size: 16px;
+}
+
+.sort-badge {
+  background: #4299e1;
+  color: white;
+  border-radius: 10px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 18px;
+  text-align: center;
+}
+
+.multi-column-sort-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+}
+
+.multi-column-sort-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  z-index: 1001;
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.multi-column-sort-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.multi-column-sort-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.close-sort-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #718096;
+  cursor: pointer;
+  padding: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.close-sort-button:hover {
+  background: #f7fafc;
+  color: #2d3748;
+}
+
+.multi-column-sort-content {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.no-sort-columns {
+  text-align: center;
+  padding: 20px;
+  color: #718096;
+}
+
+.sort-columns-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.sort-column-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.sort-column-item:hover {
+  background: #edf2f7;
+  border-color: #cbd5e0;
+}
+
+.sort-column-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sort-move-button {
+  background: white;
+  border: 1px solid #cbd5e0;
+  border-radius: 4px;
+  width: 28px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  color: #4a5568;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.sort-move-button:hover:not(:disabled) {
+  background: #edf2f7;
+  border-color: #4299e1;
+  color: #4299e1;
+}
+
+.sort-move-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sort-column-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sort-column-label {
+  font-weight: 500;
+  color: #2d3748;
+  min-width: 120px;
+}
+
+.sort-direction-select {
+  padding: 6px 10px;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
+  background: white;
+  font-size: 14px;
+  color: #4a5568;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sort-direction-select:hover {
+  border-color: #4299e1;
+}
+
+.sort-direction-select:focus {
+  outline: none;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+}
+
+.sort-remove-button {
+  background: #fed7d7;
+  border: 1px solid #fc8181;
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  color: #c53030;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.sort-remove-button:hover {
+  background: #feb2b2;
+  border-color: #f56565;
+}
+
+.add-sort-column {
+  margin-bottom: 16px;
+}
+
+.add-sort-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #4a5568;
+  font-size: 14px;
+}
+
+.add-sort-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
+  background: white;
+  font-size: 14px;
+  color: #4a5568;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.add-sort-select:hover {
+  border-color: #4299e1;
+}
+
+.add-sort-select:focus {
+  outline: none;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+}
+
+.clear-sort-button {
+  width: 100%;
+  padding: 10px;
+  background: #fed7d7;
+  border: 1px solid #fc8181;
+  border-radius: 6px;
+  color: #c53030;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clear-sort-button:hover {
+  background: #feb2b2;
+  border-color: #f56565;
+}
+
+.multi-column-sort-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid #e2e8f0;
+  background: #f7fafc;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+.cancel-sort-button,
+.apply-sort-button {
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cancel-sort-button {
+  background: white;
+  border: 1px solid #cbd5e0;
+  color: #4a5568;
+}
+
+.cancel-sort-button:hover {
+  background: #f7fafc;
+  border-color: #a0aec0;
+}
+
+.apply-sort-button {
+  background: #4299e1;
+  border: 1px solid #3182ce;
+  color: white;
+}
+
+.apply-sort-button:hover:not(:disabled) {
+  background: #3182ce;
+  border-color: #2c5282;
+}
+
+.apply-sort-button:disabled {
+  background: #cbd5e0;
+  border-color: #a0aec0;
+  color: #718096;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+

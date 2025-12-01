@@ -188,7 +188,6 @@ Once running, visit (replace `8000` with your configured port if different):
 - `GET /products/{product_id}` - Get product by primary key
 - `GET /products/by-category/{category_id}` - Get all products for a category (filtered by foreign key, paginated)
 - `GET /products/by-group/{group_id}` - Get all products for a group (filtered by foreign key, paginated)
-- `POST /products/bulk` - Get multiple products by their IDs in bulk (max 1000 IDs)
 
 ### Category Extended Data Keys
 - `GET /category-extended-data-keys` - List all category extended data keys (paginated, sorted by category_id, key)

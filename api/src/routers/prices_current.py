@@ -90,7 +90,7 @@ async def get_prices_current_bulk(
     """
     try:
         # Log incoming request details
-        logger.info(
+        logger.debug(
             f"BULK PRICES REQUEST: Received {len(request.product_ids)} product IDs. "
             f"First 10 IDs: {request.product_ids[:10]}"
         )

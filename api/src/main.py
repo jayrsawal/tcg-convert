@@ -30,7 +30,23 @@ from src.routers import (
 # Environment variables take precedence over .env file values
 load_dotenv(override=False)
 
+# Configure logging to output to console
+# Log level can be set via LOG_LEVEL environment variable (default: INFO)
+# Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, log_level, logging.INFO),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
 logger = logging.getLogger(__name__)
+
+# Toggleable HTTPX logging (disabled by default)
+# Set ENABLE_HTTPX_LOGS=true to see HTTPX request logs (at INFO level)
+enable_httpx_logs = os.getenv("ENABLE_HTTPX_LOGS", "false").lower() == "true"
+httpx_logger = logging.getLogger("httpx")
+httpx_logger.setLevel(logging.INFO if enable_httpx_logs else logging.WARNING)
 
 # Parse CORS origins from environment variable
 # Supports comma-separated list: CORS_ORIGINS=http://localhost:3000,https://example.com
@@ -65,52 +81,41 @@ app.add_middleware(
 )
 
 
-# Request logging middleware
+# Request logging middleware (debug-level, minimal noise by default)
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """Log all incoming requests with details."""
+    """Lightweight request logging; detailed logs only when LOG_LEVEL=DEBUG."""
     start_time = time.time()
-    
-    # Log request details
+
     method = request.method
     path = request.url.path
     query_params = str(request.query_params) if request.query_params else None
-    
-    # Try to read body for POST/PUT/PATCH requests
-    body = None
-    if method in ["POST", "PUT", "PATCH"]:
-        try:
-            body_bytes = await request.body()
-            if body_bytes:
-                body = body_bytes.decode('utf-8')
-                # Re-create request body stream for downstream handlers
-                async def receive():
-                    return {"type": "http.request", "body": body_bytes}
-                request._receive = receive
-        except Exception as e:
-            logger.warning(f"Error reading request body: {e}")
-    
-    # Log request
-    logger.info(
-        f"INCOMING REQUEST: {method} {path}"
-        f"{f'?{query_params}' if query_params else ''}"
-        f"{f' | Body: {body[:500]}...' if body and len(body) > 500 else f' | Body: {body}' if body else ''}"
+
+    # Debug-level request log (no body to avoid noisy/large logs)
+    logger.debug(
+        "INCOMING REQUEST: %s %s%s",
+        method,
+        path,
+        f"?{query_params}" if query_params else "",
     )
-    
+
     # Process request
     try:
         response = await call_next(request)
     except Exception as e:
-        logger.error(f"EXCEPTION in request handler: {method} {path} | Error: {e}", exc_info=True)
+        logger.error("EXCEPTION in request handler: %s %s | Error: %s", method, path, e, exc_info=True)
         raise
-    
-    # Log response
+
+    # Debug-level response log
     process_time = time.time() - start_time
-    logger.info(
-        f"RESPONSE: {method} {path} -> {response.status_code} "
-        f"(took {process_time:.3f}s)"
+    logger.debug(
+        "RESPONSE: %s %s -> %s (took %.3fs)",
+        method,
+        path,
+        response.status_code,
+        process_time,
     )
-    
+
     return response
 
 # Include routers
@@ -167,7 +172,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         logger.error(
             f"404 NOT FOUND: Client tried to access '{request.method} {request.url.path}' "
             f"| Query params: {request.query_params} | "
-            f"Available routes: /products/bulk, /prices-current/bulk, /prices-history/*"
+            f"Available routes: /prices-current/bulk, /prices-history/*"
         )
     
     return JSONResponse(

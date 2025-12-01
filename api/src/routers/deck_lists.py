@@ -18,11 +18,13 @@ class DeckListCreate(BaseModel):
     category_id: int
     name: str
     items: Dict[str, int] = Field(default_factory=dict, description="Dictionary of product_id -> quantity")
+    meta: Optional[str] = Field(None, description="Generic metadata field. Can be used for encoded color/quantity information in format '{color_1}{quantity_1}-{color_2}{quantity_2}'. Example: 'R3-G2-B1'")
 
 
 class DeckListUpdate(BaseModel):
-    """Model for updating a deck list (name only). Items should be updated via POST /items endpoint."""
+    """Model for updating a deck list (name and meta). Items should be updated via POST /items endpoint."""
     name: Optional[str] = None
+    meta: Optional[str] = Field(None, description="Generic metadata field. Can be used for encoded color/quantity information in format '{color_1}{quantity_1}-{color_2}{quantity_2}'. Example: 'R3-G2-B1'")
 
 
 class DeckListItemsUpdate(BaseModel):
@@ -132,6 +134,83 @@ async def list_deck_lists(
         raise HTTPException(status_code=500, detail=f"Error fetching deck lists: {str(e)}")
 
 
+@router.get("/search", response_model=PaginatedResponse[dict])
+async def search_deck_lists(
+    q: str = Query(..., min_length=1, description="Search query for partial deck name matching (case-insensitive)"),
+    pagination: PaginationParams = Depends(),
+    db: Client = Depends(get_db_client)
+):
+    """
+    Search deck lists by partial name matching.
+    
+    Performs case-insensitive partial matching on deck list names.
+    Results are sorted by name, then by updated_at (descending).
+    
+    **Example:**
+    - Searching for "fire" will match "Fire Deck", "Inferno Fire", etc.
+    - Searching for "meta" will match "Meta Deck", "Meta Build", etc.
+    """
+    try:
+        offset = (pagination.page - 1) * pagination.limit
+        
+        # Query with case-insensitive partial name matching using ilike
+        response = (
+            db.table("deck_lists")
+            .select("*")
+            .ilike("name", f"%{q}%")
+            .order("name", desc=False)
+            .order("updated_at", desc=True)
+            .range(offset, offset + pagination.limit - 1)
+            .execute()
+        )
+        
+        # Get usernames for all user_ids in the results
+        deck_lists = response.data if response.data else []
+        user_ids = list(set(dl.get("user_id") for dl in deck_lists if dl.get("user_id")))
+        
+        username_map = {}
+        if user_ids:
+            try:
+                profiles_response = (
+                    db.table("profiles")
+                    .select("id,username")
+                    .in_("id", user_ids)
+                    .execute()
+                )
+                if profiles_response.data:
+                    username_map = {p["id"]: p.get("username") for p in profiles_response.data}
+            except Exception:
+                # If username lookup fails, continue without usernames
+                pass
+        
+        # Add username to each deck list
+        for deck_list in deck_lists:
+            user_id = deck_list.get("user_id")
+            deck_list["username"] = username_map.get(user_id) if user_id else None
+        
+        # Get total count
+        count_query = (
+            db.table("deck_lists")
+            .select("*", count="exact")
+            .ilike("name", f"%{q}%")
+        )
+        
+        count_response = count_query.execute()
+        total = count_response.count if count_response.count is not None else None
+        
+        has_more = total is not None and (offset + pagination.limit) < total
+        
+        return PaginatedResponse(
+            data=deck_lists,
+            page=pagination.page,
+            limit=pagination.limit,
+            total=total,
+            has_more=has_more
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error searching deck lists: {str(e)}")
+
+
 @router.post("")
 @router.post("/")
 async def create_deck_list(
@@ -146,15 +225,22 @@ async def create_deck_list(
         
         card_count = calculate_card_count(deck_list.items)
         
+        # Build insert payload
+        insert_payload = {
+            "user_id": str(user_id),
+            "category_id": deck_list.category_id,
+            "name": deck_list.name,
+            "items": deck_list.items,
+            "card_count": card_count
+        }
+        
+        # Add meta if provided
+        if deck_list.meta is not None:
+            insert_payload["meta"] = deck_list.meta
+        
         response = (
             db.table("deck_lists")
-            .insert({
-                "user_id": str(user_id),
-                "category_id": deck_list.category_id,
-                "name": deck_list.name,
-                "items": deck_list.items,
-                "card_count": card_count
-            })
+            .insert(insert_payload)
             .execute()
         )
         
@@ -286,13 +372,39 @@ async def update_deck_list(
         if not existing.data:
             raise HTTPException(status_code=404, detail="Deck list not found")
         
-        # Only update name if provided
-        if deck_list.name is None:
-            return existing.data[0]
+        # Build update payload with only provided fields
+        update_payload = {}
+        if deck_list.name is not None:
+            update_payload["name"] = deck_list.name
+        if deck_list.meta is not None:
+            update_payload["meta"] = deck_list.meta
+        
+        # If no fields to update, return existing
+        if not update_payload:
+            deck_list_result = existing.data[0]
+            # Get username for the deck list creator
+            user_id_str = deck_list_result.get("user_id")
+            if user_id_str:
+                try:
+                    profile_response = (
+                        db.table("profiles")
+                        .select("username")
+                        .eq("id", user_id_str)
+                        .execute()
+                    )
+                    if profile_response.data and len(profile_response.data) > 0:
+                        deck_list_result["username"] = profile_response.data[0].get("username")
+                    else:
+                        deck_list_result["username"] = None
+                except Exception:
+                    deck_list_result["username"] = None
+            else:
+                deck_list_result["username"] = None
+            return deck_list_result
         
         response = (
             db.table("deck_lists")
-            .update({"name": deck_list.name})
+            .update(update_payload)
             .eq("deck_list_id", deck_list_id)
             .eq("user_id", str(user_id))
             .execute()
