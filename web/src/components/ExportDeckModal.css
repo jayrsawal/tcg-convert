@@ -117,6 +117,7 @@
   text-decoration: none;
   display: inline-block;
   text-align: center;
+  width: 100%;
 }
 
 .export-deck-copy-button {
@@ -171,3 +172,10 @@
   transform: none;
 }
 
+@media (max-width: 768px) {
+  .export-deck-modal {
+    min-width: 0;
+    width: 90%;
+    transform: translate(-53%, -50%);
+  }
+}
