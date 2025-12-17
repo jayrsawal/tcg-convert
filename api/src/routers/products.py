@@ -67,7 +67,7 @@ def map_filter_key_to_column(key: str) -> Optional[str]:
     Map a filter key to its corresponding column in the products table.
     
     Args:
-        key: Filter key (e.g., "Rarity", "Type", "Color")
+        key: Filter key (e.g., "Rarity", "Type", "CardType", "Color")
     
     Returns:
         Column name in products table, or None if not a cached column
@@ -77,6 +77,7 @@ def map_filter_key_to_column(key: str) -> Optional[str]:
         "rarity": "rarity",
         "color": "color",
         "type": "type",
+        "cardtype": "type",  # Accept "CardType" as an alias for "type"
         "level": "level",
         "cost": "cost",
         "atk": "atk",
@@ -280,7 +281,7 @@ async def filter_products(
     **Supported Filter Keys (mapped to cached columns):**
     - "Rarity" -> rarity column
     - "Color" -> color column
-    - "Type" -> type column
+    - "Type" or "CardType" -> type column
     - "Level" -> level column (integer)
     - "Cost" -> cost column (integer)
     - "ATK" or "Attack" -> atk column (integer)
