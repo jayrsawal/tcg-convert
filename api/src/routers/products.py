@@ -98,6 +98,18 @@ class ProductFilter(BaseModel):
     sort_direction: Optional[Union[str, List[str]]] = Field(default="asc", description="Sort direction: 'asc' or 'desc', or a list of directions (one per column in sort_columns). If a list, length must match sort_columns length.")
 
 
+class ProductSearchRequest(BaseModel):
+    """Model for searching products with filters."""
+    q: Optional[str] = Field(None, min_length=1, description="Search query for partial name matching (case-insensitive). If not provided, only filters are applied.")
+    category_id: Optional[int] = None
+    group_id: Optional[Union[int, List[int]]] = None
+    product_ids: Optional[List[int]] = None
+    numbers: Optional[List[Union[str, int]]] = None
+    filters: Optional[Dict[str, Union[str, List[str]]]] = Field(default_factory=dict, description="Key-value pairs for attribute filtering. Optional - can be omitted entirely.")
+    sort_columns: Optional[List[str]] = Field(default=["color", "type", "rarity", "level", "cost"], description="List of column names to sort by (in order)")
+    sort_direction: Optional[Union[str, List[str]]] = Field(default="asc", description="Sort direction: 'asc' or 'desc', or a list of directions (one per column in sort_columns). If a list, length must match sort_columns length.")
+
+
 @router.get("", response_model=PaginatedResponse[dict])
 @router.get("/", response_model=PaginatedResponse[dict])
 async def list_products(
@@ -481,68 +493,263 @@ async def filter_products(
         raise HTTPException(status_code=500, detail=f"Error filtering products: {str(e)}")
 
 
-@router.get("/search", response_model=PaginatedResponse[dict])
+@router.post("/search", response_model=PaginatedResponse[dict])
 async def search_products(
-    q: str = Query(..., min_length=1, description="Search query for partial name matching (case-insensitive)"),
+    search_data: ProductSearchRequest = Body(...),
     pagination: PaginationParams = Depends(),
-    sort_columns: Optional[List[str]] = Query(default=["color", "type", "rarity", "level", "cost"], description="List of column names to sort by (in order)"),
-    sort_direction: Optional[Union[str, List[str]]] = Query(default="asc", description="Sort direction: 'asc' or 'desc', or a list of directions (one per column in sort_columns). If a list, length must match sort_columns length."),
     db: Client = Depends(get_db_client)
 ):
     """
-    Search products by partial name matching.
+    Search products by partial name matching with optional filters.
     
-    Performs case-insensitive partial matching on product names.
+    Performs case-insensitive partial matching on product names (matches anywhere in the name) if a search query is provided.
+    Can be combined with filters for category, group, product_ids, numbers, and attribute filters.
+    If no search query is provided, only the filters are applied (similar to /products/filter).
     Results are sorted by the specified columns (default: color, type, rarity, level, cost in ascending order).
     
-    **Example:**
-    - Searching for "pika" will match "Pikachu", "Pikachu VMAX", etc.
-    - Searching for "char" will match "Charizard", "Charmander", etc.
+    **Filter Logic:**
+    - If `q` is provided, name search uses partial matching (e.g., "pika" matches "Pikachu", "Pikachu VMAX")
+    - All filters (category_id, group_id, product_ids, numbers, filters dict) are combined with AND logic
+    - Name search (if provided) is combined with other filters using AND logic
+    
+    **Supported Filter Keys (mapped to cached columns):**
+    - "Rarity" -> rarity column
+    - "Color" -> color column
+    - "Type" or "CardType" -> type column
+    - "Level" -> level column (integer)
+    - "Cost" -> cost column (integer)
+    - "ATK" or "Attack" -> atk column (integer)
+    - "HP" -> hp column (integer)
+    
+    **Examples:**
+    - {"q": "pika"} - Products with "pika" anywhere in the name
+    - {"filters": {"Color": ["Blue", "White"], "CardType": ["Unit"]}} - Products with Color=Blue OR Color=White AND CardType=Unit (no name search)
+    - {"q": "char", "filters": {"Rarity": "Rare"}} - Products with "char" in name AND Rarity=Rare
+    - {"q": "pika", "category_id": 5} - Products with "pika" in name AND category_id=5
     """
     try:
+        # Validate sort direction
+        if isinstance(search_data.sort_direction, str):
+            if search_data.sort_direction not in ["asc", "desc"]:
+                raise HTTPException(status_code=400, detail="sort_direction must be 'asc' or 'desc'")
+        elif isinstance(search_data.sort_direction, list):
+            if len(search_data.sort_direction) != len(search_data.sort_columns):
+                raise HTTPException(status_code=400, detail=f"sort_direction list length ({len(search_data.sort_direction)}) must match sort_columns length ({len(search_data.sort_columns)})")
+            for direction in search_data.sort_direction:
+                if direction not in ["asc", "desc"]:
+                    raise HTTPException(status_code=400, detail="Each sort_direction value must be 'asc' or 'desc'")
+        
         # Calculate offset for pagination
         offset = (pagination.page - 1) * pagination.limit
         
-        # Query with case-insensitive partial name matching using ilike
-        # Include number column (synced via trigger from product_extended_data) and extended_data_raw
+        # Build query with optional name search and all filters
         try:
             query = (
                 db.table("products")
                 .select("product_id,category_id,group_id,name,clean_name,image_url,url,fixed_amount,number,short_number,extended_data_raw,rarity,color,type,level,cost,atk,hp,modified_on,fetched_at")
-                .ilike("name", f"%{q}%")
                 .not_.is_("number", "null")
             )
-            query = apply_sorting(query, sort_columns, sort_direction)
-            response = query.range(offset, offset + pagination.limit - 1).execute()
+            
+            # Apply name search filter if query is provided
+            # Search against clean_name column with normalized query
+            if search_data.q:
+                # Normalize the search query:
+                # - Remove special characters: parentheses, brackets, single/double quotes
+                # - Replace + with "plus"
+                # - Replace dashes with spaces
+                normalized_q = search_data.q
+                # Remove special characters
+                for char in ['(', ')', '[', ']', "'", '"', "`"]:
+                    normalized_q = normalized_q.replace(char, '')
+                # Replace + with "plus"
+                normalized_q = normalized_q.replace('+', 'plus')
+                # Replace dashes with spaces
+                normalized_q = normalized_q.replace('-', ' ')
+                # Escape any existing % or _ in the normalized query to treat them as literals
+                escaped_q = normalized_q.replace("%", "\\%").replace("_", "\\_")
+                # Add wildcards on both sides for partial matching anywhere
+                # This pattern will match "chu" in "pikachu", "pikachu vmax", etc.
+                pattern = f"%{escaped_q}%"
+                # Use OR logic to match against clean_name OR number column
+                # PostgREST syntax: or=(clean_name.ilike.*pattern*,number.ilike.*pattern*)
+                # We'll use ilike for both to support partial matching on number as well
+                number_pattern = f"%{escaped_q}%"
+                # Try to use PostgREST's or filter syntax by setting it on session params
+                try:
+                    # Access the query's session to set the or filter directly
+                    if hasattr(query, 'session'):
+                        session = query.session
+                        # Try different ways to set the or parameter
+                        if hasattr(session, 'params'):
+                            # PostgREST or filter format: or=(condition1,condition2)
+                            or_filter = f"clean_name.ilike.{pattern},number.ilike.{number_pattern}"
+                            session.params['or'] = or_filter
+                        elif hasattr(session, '_params'):
+                            or_filter = f"clean_name.ilike.{pattern},number.ilike.{number_pattern}"
+                            session._params['or'] = or_filter
+                        else:
+                            # Fallback: just match clean_name
+                            query = query.ilike("clean_name", pattern)
+                    else:
+                        # Fallback: just match clean_name
+                        query = query.ilike("clean_name", pattern)
+                except Exception:
+                    # Fallback: just match clean_name if or filter doesn't work
+                    query = query.ilike("clean_name", pattern)
+            
+            # Apply category filter if provided
+            if search_data.category_id:
+                query = query.eq("category_id", search_data.category_id)
+            
+            # Apply group filter if provided
+            if search_data.group_id:
+                if isinstance(search_data.group_id, list):
+                    query = query.in_("group_id", search_data.group_id)
+                else:
+                    query = query.eq("group_id", search_data.group_id)
+            
+            # Apply product_ids filter if provided
+            if search_data.product_ids:
+                query = query.in_("product_id", search_data.product_ids)
+            
+            # Apply number filter if provided
+            if search_data.numbers:
+                number_values = [str(num) for num in search_data.numbers if num is not None]
+                if number_values:
+                    query = query.in_("number", number_values)
+            
+            # Apply attribute filters directly on cached columns
+            if search_data.filters and len(search_data.filters) > 0:
+                for key, value in search_data.filters.items():
+                    if value is None:
+                        continue
+                    
+                    column = map_filter_key_to_column(key)
+                    if column is None:
+                        logger.warning(f"  Filter key '{key}' does not map to a cached column, skipping")
+                        continue
+                    
+                    values = [value] if isinstance(value, str) else value
+                    if not values:
+                        continue
+                    
+                    # For integer columns, convert values to integers
+                    if column in ["level", "cost", "atk", "hp"]:
+                        try:
+                            values = [int(v) for v in values if v is not None]
+                        except (ValueError, TypeError) as e:
+                            logger.warning(f"  Invalid value for integer column '{column}': {values}, skipping")
+                            continue
+                    
+                    # Apply filter: multiple values use OR logic (in_)
+                    if len(values) == 1:
+                        query = query.eq(column, values[0])
+                    else:
+                        query = query.in_(column, values)
+            
+            # Apply custom sorting
+            query = apply_sorting(query, search_data.sort_columns, search_data.sort_direction)
+            
+            # Execute the sorted query
+            sorted_response = query.range(offset, offset + pagination.limit - 1).execute()
+            
+            # Get total count for pagination metadata (with same filters)
+            try:
+                count_query = db.table("products").select("product_id", count="exact").not_.is_("number", "null")
+                
+                # Apply name search filter if query is provided
+                # Search against clean_name column with normalized query (same normalization as main query)
+                if search_data.q:
+                    # Normalize the search query (same as main query):
+                    # - Remove special characters: parentheses, brackets, single/double quotes
+                    # - Replace + with "plus"
+                    # - Replace dashes with spaces
+                    normalized_q = search_data.q
+                    # Remove special characters
+                    for char in ['(', ')', '[', ']', "'", '"']:
+                        normalized_q = normalized_q.replace(char, '')
+                    # Replace + with "plus"
+                    normalized_q = normalized_q.replace('+', 'plus')
+                    # Replace dashes with spaces
+                    normalized_q = normalized_q.replace('-', ' ')
+                    # Escape any existing % or _ in the normalized query to treat them as literals
+                    escaped_q = normalized_q.replace("%", "\\%").replace("_", "\\_")
+                    # Add wildcards on both sides for partial matching anywhere
+                    pattern = f"%{escaped_q}%"
+                    # Use OR logic to match against clean_name OR number column (same as main query)
+                    number_pattern = f"%{escaped_q}%"
+                    # Try to use PostgREST's or filter syntax by setting it on session params
+                    try:
+                        if hasattr(count_query, 'session'):
+                            session = count_query.session
+                            if hasattr(session, 'params'):
+                                or_filter = f"clean_name.ilike.{pattern},number.ilike.{number_pattern}"
+                                session.params['or'] = or_filter
+                            elif hasattr(session, '_params'):
+                                or_filter = f"clean_name.ilike.{pattern},number.ilike.{number_pattern}"
+                                session._params['or'] = or_filter
+                            else:
+                                count_query = count_query.ilike("clean_name", pattern)
+                        else:
+                            count_query = count_query.ilike("clean_name", pattern)
+                    except Exception:
+                        # Fallback: just use clean_name
+                        count_query = count_query.ilike("clean_name", pattern)
+                
+                if search_data.category_id:
+                    count_query = count_query.eq("category_id", search_data.category_id)
+                if search_data.group_id:
+                    if isinstance(search_data.group_id, list):
+                        count_query = count_query.in_("group_id", search_data.group_id)
+                    else:
+                        count_query = count_query.eq("group_id", search_data.group_id)
+                if search_data.product_ids:
+                    count_query = count_query.in_("product_id", search_data.product_ids)
+                if search_data.numbers:
+                    number_values = [str(num) for num in search_data.numbers if num is not None]
+                    if number_values:
+                        count_query = count_query.in_("number", number_values)
+                if search_data.filters and len(search_data.filters) > 0:
+                    for key, value in search_data.filters.items():
+                        if value is None:
+                            continue
+                        column = map_filter_key_to_column(key)
+                        if column is None:
+                            continue
+                        values = [value] if isinstance(value, str) else value
+                        if not values:
+                            continue
+                        if column in ["level", "cost", "atk", "hp"]:
+                            try:
+                                values = [int(v) for v in values if v is not None]
+                            except (ValueError, TypeError):
+                                continue
+                        if len(values) == 1:
+                            count_query = count_query.eq(column, values[0])
+                        else:
+                            count_query = count_query.in_(column, values)
+                
+                count_response = count_query.execute()
+                total = count_response.count if count_response.count is not None else 0
+            except Exception:
+                total = None
+            
+            has_more = total is not None and (offset + pagination.limit) < total
+            
+            return PaginatedResponse(
+                data=sorted_response.data,
+                page=pagination.page,
+                limit=pagination.limit,
+                total=total,
+                has_more=has_more
+            )
         except Exception as col_error:
             logger.error(f"Error searching products: {str(col_error)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Error searching products: {str(col_error)}")
-        
-        # Get total count for pagination metadata
-        try:
-            count_response = (
-                db.table("products")
-                .select("*", count="exact")
-                .ilike("name", f"%{q}%")
-                .not_.is_("number", "null")
-                .execute()
-            )
-            total = count_response.count if count_response.count is not None else None
-        except Exception:
-            # If count fails, we can't provide total
-            total = None
-        
-        # Determine if there are more pages
-        has_more = total is not None and (offset + pagination.limit) < total
-        
-        return PaginatedResponse(
-            data=response.data,
-            page=pagination.page,
-            limit=pagination.limit,
-            total=total,
-            has_more=has_more
-        )
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"  Error searching products: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error searching products: {str(e)}")
 
 

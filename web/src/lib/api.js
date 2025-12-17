@@ -133,9 +133,10 @@ export const filterProducts = async (params = {}) => {
 };
 
 /**
- * Search products by name
+ * Search products by name with optional attribute filters
  * @param {Object} params - Search parameters object
  * @param {string} params.q - Search query for partial name matching (case-insensitive, required)
+ * @param {Object} [params.filters] - Attribute filters object (same format as filterProducts)
  * @param {number} [params.page] - Page number (default: 1, sent as query parameter)
  * @param {number} [params.limit] - Items per page (default: 100, sent as query parameter)
  * @returns {Promise<Object>} Response with PaginatedResponse structure: { data, page, limit, total, has_more }
@@ -144,6 +145,7 @@ export const searchProducts = async (params = {}) => {
   try {
     const {
       q,
+      filters = {},
       page = 1,
       limit = 100
     } = params;
@@ -153,18 +155,43 @@ export const searchProducts = async (params = {}) => {
       throw new Error('Search query (q) is required and must be a non-empty string');
     }
 
-    // Build URL with query parameters
+    // Normalize filters to ensure all values are arrays (same as filterProducts)
+    const normalizedFilters = {};
+    Object.keys(filters).forEach(key => {
+      const value = filters[key];
+      if (Array.isArray(value)) {
+        normalizedFilters[key] = value;
+      } else if (value !== null && value !== undefined) {
+        normalizedFilters[key] = [value];
+      }
+    });
+
+    const headers = await getAuthHeaders();
+    
+    // Build URL with query parameters for pagination only
     let url = API_BASE_URL ? `${API_BASE_URL}/products/search` : '/products/search';
     const queryParams = new URLSearchParams();
-    queryParams.append('q', q.trim());
     queryParams.append('page', String(page));
     queryParams.append('limit', String(limit));
     url += `?${queryParams.toString()}`;
-
-    const headers = await getAuthHeaders();
+    
+    // Always use POST: q and filters go in the request body
+    const requestBody = {
+      q: q.trim()
+    };
+    
+    // Add filters to body if present
+    if (Object.keys(normalizedFilters).length > 0) {
+      requestBody.filters = normalizedFilters;
+    }
+    
     const response = await fetch(url, {
-      method: 'GET',
-      headers,
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {

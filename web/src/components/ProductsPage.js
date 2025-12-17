@@ -166,6 +166,7 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
   const lastCategoryIdRef = useRef(null);
   const prevFilterStateRef = useRef({});
   const scrollPositionRef = useRef(0);
+  const lastLoadParamsRef = useRef(null); // Track last load parameters to prevent duplicate calls
 
   const isViewingUsername = Boolean(routeUsername);
   const viewMode = propIsViewOnly || isViewingUsername;
@@ -415,6 +416,39 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
     if (!categoryId) return;
     if (loadingProductsRef.current && !append) return; // Allow loading more pages
 
+    // Create a unique key for this load request to prevent duplicate calls
+    // Sort attributeFilters keys to ensure consistent serialization
+    const sortedAttributeFilters = attributeFilters ? Object.keys(attributeFilters).sort().reduce((acc, key) => {
+      const value = attributeFilters[key];
+      acc[key] = Array.isArray(value) ? [...value].sort() : value;
+      return acc;
+    }, {}) : {};
+    
+    const loadKey = JSON.stringify({
+      page,
+      append,
+      searchQuery: searchQuery?.trim() || '',
+      categoryId,
+      selectedGroupIds: (selectedGroupIds || []).slice().sort(),
+      attributeFilters: sortedAttributeFilters,
+      sortColumns: (overrideSortColumns || sortColumns || []).slice(),
+      sortDirections: (overrideSortDirections || sortDirections || []).slice(),
+      showFavoritesOnly,
+      showOwnedOnly
+    });
+
+    // CRITICAL: If this exact same request is already in progress or was just completed, skip it
+    if (lastLoadParamsRef.current === loadKey && !append) {
+      console.log('[loadProducts] BLOCKED duplicate call with key:', loadKey.substring(0, 100));
+      return;
+    }
+
+    // Mark this request as in progress BEFORE making the API call
+    if (!append) {
+      lastLoadParamsRef.current = loadKey;
+      console.log('[loadProducts] Starting new request with key:', loadKey.substring(0, 100));
+    }
+
     try {
       if (!append) {
         loadingProductsRef.current = true;
@@ -433,6 +467,7 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
       if (searchQuery && searchQuery.trim()) {
         const searchParams = {
           q: searchQuery.trim(),
+          filters: attributeFilters, // Include attribute filters in search
           page: page,
           limit: 64
         };
@@ -458,6 +493,11 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
           hasMore = response.has_more === true;
         }
         
+        // If we got no results from search, explicitly set hasMore to false to stop retrying
+        if (productsData.length === 0) {
+          hasMore = false;
+        }
+        
         // Filter by category if needed (search may return products from all categories)
         if (categoryId && productsData.length > 0) {
           const categoryIdInt = parseInt(categoryId, 10);
@@ -466,6 +506,10 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
             return productCategoryId === categoryIdInt;
           });
           total = productsData.length;
+          // After category filtering, if no products remain, set hasMore to false
+          if (productsData.length === 0) {
+            hasMore = false;
+          }
         }
       }
       // Check if we're filtering by favorites or owned - use bulk endpoint
@@ -561,6 +605,11 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
         if (total === 0 && productsData.length > 0) {
           total = pageNum * pageSize + (productsData.length < pageSize ? 0 : 1);
         }
+        
+        // If we got no results from filter endpoint, explicitly set hasMore to false to stop retrying
+        if (productsData.length === 0) {
+          hasMore = false;
+        }
       }
 
       if (append) {
@@ -580,7 +629,8 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
           const updatedProducts = [...prev, ...newProducts];
           // Use API's has_more field if available, otherwise calculate from total
           const itemsLoaded = updatedProducts.length;
-          const calculatedHasMore = total > 0 ? itemsLoaded < total : hasMore;
+          // If we got no new products from this append, there are no more pages
+          const calculatedHasMore = newProducts.length === 0 ? false : (total > 0 ? itemsLoaded < total : hasMore);
           // Track if this load actually added products (not just duplicates)
           const actuallyAddedProducts = newProducts.length > 0;
           console.log('loadProducts (append):', {
@@ -615,10 +665,9 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
         });
       } else {
         // Replace products (new search/filter)
-        setProducts(productsData);
-        // Use API's has_more field if available, otherwise calculate from total
+        // If we got no results, set hasMorePages to false FIRST to prevent observer from triggering
         const itemsLoaded = productsData.length;
-        const calculatedHasMore = total > 0 ? itemsLoaded < total : hasMore;
+        const calculatedHasMore = productsData.length === 0 ? false : (total > 0 ? itemsLoaded < total : hasMore);
         console.log('loadProducts (replace):', {
           productsDataLength: productsData.length,
           pageSize,
@@ -628,8 +677,15 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
           calculatedHasMore,
           pageNum
         });
-        // Use API's has_more if available, otherwise use calculated value
+        // Set hasMorePages FIRST to prevent IntersectionObserver from triggering
         setHasMorePages(calculatedHasMore);
+        // If no results, set filteredProducts to empty BEFORE setting products
+        // This prevents filterAndSortProducts from running with stale data
+        if (productsData.length === 0) {
+          setFilteredProducts([]);
+        }
+        // Then set products (which will trigger filterAndSortProducts)
+        setProducts(productsData);
         
         // Track all products as newly added for fade-in animation
         if (productsData.length > 0) {
@@ -694,10 +750,14 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
         setProductPrices({});
       }
     } catch (err) {
-      console.error('Error loading products:', err);
+      console.error('[loadProducts] Error:', err);
       if (!append) {
         setProducts([]);
+        setFilteredProducts([]);
+        setHasMorePages(false);
         setError(err.message || 'Failed to load products');
+        // DON'T clear lastLoadParamsRef on error - keep it to prevent retry loops
+        // Only clear if it's a different error scenario
       }
     } finally {
       if (!append) {
@@ -811,9 +871,17 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
 
     let filtered = [...products];
 
-    // Search filter (client-side) - partial match where order matters (starts with)
-    // Searches by name first, then falls back to number attribute
-    if (searchQuery.trim()) {
+    // Search filter (client-side) - only apply if we didn't use the search endpoint
+    // When using the search endpoint, the API already handles search filtering (including special character normalization)
+    // So we skip client-side search filtering to avoid double-filtering
+    // In loadProducts: when searchQuery exists and we're not filtering by favorites/owned, we use searchProducts endpoint
+    // So we skip client-side filtering in that case to avoid double-filtering
+    // We only apply client-side filtering when filtering by favorites/owned (which use filterProducts with product_ids)
+    const usedSearchEndpoint = searchQuery && searchQuery.trim() && !showFavoritesOnly && !showOwnedOnly;
+    
+    if (searchQuery.trim() && !usedSearchEndpoint) {
+      // Only apply client-side search filtering when NOT using the search endpoint
+      // This happens when filtering by favorites/owned, where we load products by ID and need client-side filtering
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(product => {
         const name = (product.name || '').toLowerCase();
@@ -883,12 +951,13 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
       sortColumns: sortColumns || [],
       sortDirections: sortDirections || [],
       attributeFilters: JSON.stringify(attributeFilters), // Stringify for comparison
-      productsLength: products.length
+      // Don't include productsLength in comparison - it changes when search returns no results
+      // which would cause infinite loops
     };
     
     const prevState = prevFilterStateRef.current || {};
     
-    // Reset if any filter changed or products list was replaced
+    // Reset if any filter changed (but NOT if products list was replaced/emptied)
     const prevSortColumns = prevState.sortColumns || [];
     const prevSortDirections = prevState.sortDirections || [];
     const currentSortColumns = sortColumns || [];
@@ -901,16 +970,17 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
       currentFilterState.sortOption !== (prevState.sortOption || 'name-asc') ||
       JSON.stringify(currentSortColumns) !== JSON.stringify(prevSortColumns) ||
       JSON.stringify(currentSortDirections) !== JSON.stringify(prevSortDirections) ||
-      currentFilterState.attributeFilters !== (prevState.attributeFilters || '{}') ||
-      (prevState.productsLength === 0 && currentFilterState.productsLength > 0) ||
-      (prevState.productsLength > 0 && currentFilterState.productsLength === 0);
+      currentFilterState.attributeFilters !== (prevState.attributeFilters || '{}');
+      // Removed productsLength from comparison to prevent infinite loops when search returns no results
     
-    if (shouldReset) {
+    // Only reset if we're not already loading and the filter actually changed
+    if (shouldReset && !loadingProductsRef.current && !loading) {
       setCurrentPage(1);
       loadProducts(1, false);
     }
     
-    // Always update the ref to track current state
+    // Always update the ref to track current state (even if we didn't reset)
+    // This prevents false positives on subsequent calls
     prevFilterStateRef.current = currentFilterState;
     
     // Restore scroll position after DOM updates if we didn't reset
@@ -936,7 +1006,11 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
       loadAttributes(),
       loadAllProductsForSidebar()
     ]);
-    if (!viewMode && products.length === 0 && hasMorePages) {
+    // Only auto-load products if we have no products AND we haven't explicitly set hasMorePages to false
+    // This prevents infinite loops when search returns no results (hasMorePages will be false)
+    // Also check that we're not already loading to prevent duplicate calls
+    // IMPORTANT: Don't auto-load if we have an active search query - let the search handle it
+    if (!viewMode && products.length === 0 && hasMorePages && !loadingProductsRef.current && !loading && !searchQuery?.trim()) {
       loadProducts(1, false);
     }
   }, [categoryId, viewMode, loadGroups, loadAttributes, loadAllProductsForSidebar, products.length, hasMorePages, loadProducts]);
@@ -1125,12 +1199,15 @@ useEffect(() => {
     }
   }, [categoryId, loadAttributes]);
 
+  // Only reload products when categoryId changes, not when loadProducts function reference changes
+  // CRITICAL: Don't reload if we have an active search query - let the search handle it
   useEffect(() => {
-    if (categoryId) {
+    if (categoryId && !viewMode && !searchQuery?.trim() && !loadingProductsRef.current) {
       setCurrentPage(1);
       loadProducts(1, false);
     }
-  }, [categoryId, loadProducts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryId]); // Intentionally omitting loadProducts and searchQuery to prevent infinite loops
 
   useEffect(() => {
     if (categoryId) {

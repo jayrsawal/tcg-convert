@@ -58,7 +58,7 @@ const DeckBuilderPage = () => {
   const [sortDirections, setSortDirections] = useState([]);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [favorites, setFavorites] = useState(new Set());
-  const [showInDeckOnly, setShowInDeckOnly] = useState(true); // Default to true in deck builder mode
+  const [showInDeckOnly, setShowInDeckOnly] = useState(false); // Default to false, will be set to true if deck has cards
   const [showOwnedOnly, setShowOwnedOnly] = useState(false);
   const [inventory, setInventory] = useState({}); // { product_id: quantity } map
   const [isUpdatingDeck, setIsUpdatingDeck] = useState(false);
@@ -165,7 +165,7 @@ const DeckBuilderPage = () => {
       sort_order: order
     };
   }, [sortColumns, sortDirections, sortOption]);
-  
+
   // History for undo functionality
   const [history, setHistory] = useState([]);
   const historyIndexRef = useRef(-1);
@@ -455,9 +455,15 @@ const DeckBuilderPage = () => {
     let sourceProducts = shouldFilterToDeck ? [...deckProducts] : [...products];
     let filtered = sourceProducts;
 
-    // Filter by search query - partial match where order matters (starts with)
-    // Searches by name first, then falls back to number attribute
-    if (searchQuery.trim()) {
+    // Search filter (client-side) - only apply if we didn't use the search endpoint
+    // When using the search endpoint, the API already handles search filtering (including special character normalization)
+    // So we skip client-side search filtering to avoid double-filtering
+    // Note: We check if searchQuery exists AND we're not filtering to deck (which uses deckProducts loaded by ID)
+    // Since loadProducts uses searchProducts when searchQuery is present and not filtering to deck, we skip client-side filtering
+    const usedSearchEndpoint = searchQuery && searchQuery.trim() && !shouldFilterToDeck && !showFavoritesOnly && !showOwnedOnly && !showInDeckOnly;
+    
+    if (searchQuery.trim() && !usedSearchEndpoint) {
+      // Only apply client-side search filtering when NOT using the search endpoint
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(product => {
         const name = (product.name || '').toLowerCase();
@@ -530,6 +536,8 @@ const DeckBuilderPage = () => {
     
     // Only reset displayedCount if filter parameters actually changed
     // Don't reset when deckItems/stagedDeckItems change (to preserve scroll position)
+    // Don't include productsLength/deckProductsLength in comparison - it changes when search returns no results
+    // which would cause infinite loops
     const currentFilterState = {
       searchQuery,
       showFavoritesOnly,
@@ -539,12 +547,10 @@ const DeckBuilderPage = () => {
       sortOption,
       sortColumns: JSON.stringify(sortColumns || []),
       sortDirections: JSON.stringify(sortDirections || []),
-      attributeFilters: JSON.stringify(attributeFilters), // Stringify for comparison
-      productsLength: products.length,
-      deckProductsLength: deckProducts.length
+      attributeFilters: JSON.stringify(attributeFilters) // Stringify for comparison
     };
     
-    const prevState = prevFilterStateRef.current;
+    const prevState = prevFilterStateRef.current || {};
     
     // Only reset if:
     // 1. Search query changed
@@ -554,24 +560,21 @@ const DeckBuilderPage = () => {
     // 5. Sort option changed
     // 6. Attribute filters changed
     // 7. Source switched between products and deckProducts (shouldFilterToDeck changed)
-    // 8. Source list was completely replaced (length went to 0 or from 0)
-    // Note: We don't reset when deckProducts length changes slightly (adding one card)
+    // Note: We don't reset when products/deckProducts length changes - this prevents infinite loops
+    // when search returns no results (products.length becomes 0, which would trigger reset again)
     const shouldReset = 
-      currentFilterState.searchQuery !== prevState.searchQuery ||
-      currentFilterState.showFavoritesOnly !== prevState.showFavoritesOnly ||
-      currentFilterState.showInDeckOnly !== prevState.showInDeckOnly ||
-      currentFilterState.showOwnedOnly !== prevState.showOwnedOnly ||
-      currentFilterState.sortOption !== prevState.sortOption ||
-      currentFilterState.sortColumns !== prevState.sortColumns ||
-      currentFilterState.sortDirections !== prevState.sortDirections ||
-      currentFilterState.attributeFilters !== prevState.attributeFilters ||
-      currentFilterState.shouldFilterToDeck !== prevState.shouldFilterToDeck ||
-      (currentFilterState.shouldFilterToDeck && 
-       (prevState.deckProductsLength === 0 || currentFilterState.deckProductsLength === 0)) ||
-      (!currentFilterState.shouldFilterToDeck && 
-       (prevState.productsLength === 0 || currentFilterState.productsLength === 0));
+      currentFilterState.searchQuery !== (prevState.searchQuery || '') ||
+      currentFilterState.showFavoritesOnly !== (prevState.showFavoritesOnly || false) ||
+      currentFilterState.showInDeckOnly !== (prevState.showInDeckOnly || false) ||
+      currentFilterState.showOwnedOnly !== (prevState.showOwnedOnly || false) ||
+      currentFilterState.sortOption !== (prevState.sortOption || 'name-asc') ||
+      currentFilterState.sortColumns !== (prevState.sortColumns || '[]') ||
+      currentFilterState.sortDirections !== (prevState.sortDirections || '[]') ||
+      currentFilterState.attributeFilters !== (prevState.attributeFilters || '{}') ||
+      currentFilterState.shouldFilterToDeck !== (prevState.shouldFilterToDeck || false);
     
-    if (shouldReset) {
+    // Only reset if we're not already loading and the filter actually changed
+    if (shouldReset && !loadingProductsRef.current && !loading) {
       setCurrentPage(1);
       if (canEdit) {
         loadProducts(1, false);
@@ -598,6 +601,7 @@ const DeckBuilderPage = () => {
       });
     }
   }, [products, deckProducts, searchQuery, showFavoritesOnly, showInDeckOnly, showOwnedOnly, favorites, inventory, deckItems, stagedDeckItems, sortOption, user, deckList, canEdit]);
+
 
   const loadDeckList = async () => {
     if (!deckListId) return;
@@ -629,6 +633,11 @@ const DeckBuilderPage = () => {
       }
       setDeckItems(itemsMap);
       setStagedDeckItems({});
+      
+      // Set "In Deck" filter default: only enable if deck has cards
+      // This reduces clicks for new empty decks (user sees all cards immediately)
+      const hasCards = Object.values(itemsMap).some(quantity => quantity > 0);
+      setShowInDeckOnly(hasCards);
       
       // Initialize history
       setHistory([{ items: { ...itemsMap } }]);
@@ -764,6 +773,7 @@ const DeckBuilderPage = () => {
     if (!deckList || !deckList.category_id) return;
     if (loadingProductsRef.current && !append) return; // Allow loading more pages
 
+
     try {
       if (!append) {
         loadingProductsRef.current = true;
@@ -782,6 +792,7 @@ const DeckBuilderPage = () => {
       if (searchQuery && searchQuery.trim()) {
         const searchParams = {
           q: searchQuery.trim(),
+          filters: attributeFilters, // Include attribute filters in search
           page: page,
           limit: 64
         };
@@ -807,6 +818,11 @@ const DeckBuilderPage = () => {
           hasMore = response.has_more === true;
         }
         
+        // If we got no results from search, explicitly set hasMore to false to stop retrying
+        if (productsData.length === 0) {
+          hasMore = false;
+        }
+        
         // Filter by category if needed (search may return products from all categories)
         if (deckList.category_id && productsData.length > 0) {
           const categoryIdInt = deckList.category_id;
@@ -815,6 +831,10 @@ const DeckBuilderPage = () => {
             return productCategoryId === categoryIdInt;
           });
           total = productsData.length;
+          // After category filtering, if no products remain, set hasMore to false
+          if (productsData.length === 0) {
+            hasMore = false;
+          }
         }
       }
       // Check if we're filtering by favorites, owned, or in-deck - use bulk endpoint
@@ -918,6 +938,11 @@ const DeckBuilderPage = () => {
         if (total === 0 && productsData.length > 0) {
           total = pageNum * pageSize + (productsData.length < pageSize ? 0 : 1);
         }
+        
+        // If we got no results, explicitly set hasMore to false to stop retrying
+        if (productsData.length === 0) {
+          hasMore = false;
+        }
       }
 
       if (append) {
@@ -937,7 +962,8 @@ const DeckBuilderPage = () => {
           const updatedProducts = [...prev, ...newProducts];
           // Use API's has_more field if available, otherwise calculate from total
           const itemsLoaded = updatedProducts.length;
-          const calculatedHasMore = total > 0 ? itemsLoaded < total : hasMore;
+          // If we got no new products from this append, there are no more pages
+          const calculatedHasMore = newProducts.length === 0 ? false : (total > 0 ? itemsLoaded < total : hasMore);
           // Use API's has_more if available, otherwise use calculated value
           setHasMorePages(calculatedHasMore);
           
@@ -956,12 +982,17 @@ const DeckBuilderPage = () => {
         });
       } else {
         // Replace products (new search/filter)
-        setProducts(productsData);
-        // Use API's has_more field if available, otherwise calculate from total
+        // If we got no results, set hasMorePages to false FIRST to prevent observer from triggering
         const itemsLoaded = productsData.length;
-        const calculatedHasMore = total > 0 ? itemsLoaded < total : hasMore;
-        // Use API's has_more if available, otherwise use calculated value
+        const calculatedHasMore = productsData.length === 0 ? false : (total > 0 ? itemsLoaded < total : hasMore);
+        // Set hasMorePages FIRST to prevent IntersectionObserver from triggering
         setHasMorePages(calculatedHasMore);
+        // Then set products (which will trigger filterAndSortProducts)
+        setProducts(productsData);
+        // If no results, also immediately set filteredProducts to empty to prevent observer setup
+        if (productsData.length === 0) {
+          setFilteredProducts([]);
+        }
         
         // Track all products as newly added for fade-in animation
         if (productsData.length > 0) {
