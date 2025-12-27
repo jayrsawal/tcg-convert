@@ -60,7 +60,7 @@ const LoginPage = () => {
     <div className="login-page">
       <header className="login-header">
         <Link to="/" className="logo-link">
-          <h1 className="logo">TCGConvert</h1>
+          <h1 className="logo">StrikerPack</h1>
         </Link>
       </header>
       

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import html2canvas from 'html2canvas';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useTCGPercentage } from '../contexts/TCGPercentageContext';
@@ -35,6 +35,7 @@ const IMAGE_PROXY_BASE = process.env.REACT_APP_IMAGE_PROXY_URL || '/image-proxy'
 const DeckBuilderPage = () => {
   const { deckListId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { selectedCurrency, setSelectedCurrency, currencyRates, loadingRates } = useCurrency();
   const { selectedTCGPercentage } = useTCGPercentage();
@@ -46,16 +47,111 @@ const DeckBuilderPage = () => {
   const [groups, setGroups] = useState([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState([]);
   const [categoryKeys, setCategoryKeys] = useState([]);
-  const [attributeFilters, setAttributeFilters] = useState({});
+  // Load attribute filters from URL params
+  // Uses format: filter_Color=Red&filter_Color=Blue&filter_Rarity=SR
+  const loadAttributeFilters = () => {
+    const filters = {};
+    searchParams.forEach((value, key) => {
+      if (key.startsWith('filter_')) {
+        const attributeName = key.substring(7); // Remove 'filter_' prefix
+        if (!filters[attributeName]) {
+          filters[attributeName] = [];
+        }
+        filters[attributeName].push(value);
+      }
+    });
+    return filters;
+  };
+  const [attributeFilters, setAttributeFilters] = useState(loadAttributeFilters);
   const [pendingAttributeFilters, setPendingAttributeFilters] = useState({});
   const [attributeValues, setAttributeValues] = useState({});
   const [showAttributeFilters, setShowAttributeFilters] = useState(false);
   const [collapsedAttributeGroups, setCollapsedAttributeGroups] = useState({});
   const [categoryAttributesCache, setCategoryAttributesCache] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortOption, setSortOption] = useState('name-asc'); // Legacy support
-  const [sortColumns, setSortColumns] = useState([]);
-  const [sortDirections, setSortDirections] = useState([]);
+  // Load sort state: URL params take priority over localStorage
+  // URL format: sort=rarity-asc,level-desc or sort=name-asc (legacy)
+  const loadSortState = () => {
+    // Check URL params first
+    const urlSort = searchParams.get('sort');
+    
+    if (urlSort) {
+      try {
+        // Check if it's multi-column format (contains commas)
+        if (urlSort.includes(',')) {
+          // Multi-column format: rarity-asc,level-desc
+          const parts = urlSort.split(',');
+          const columns = [];
+          const directions = [];
+          parts.forEach(part => {
+            // Split on last hyphen to handle column names that might contain hyphens
+            const lastHyphenIndex = part.lastIndexOf('-');
+            if (lastHyphenIndex > 0) {
+              const col = part.substring(0, lastHyphenIndex).trim();
+              const dir = part.substring(lastHyphenIndex + 1).trim();
+              if (col && dir) {
+                columns.push(col);
+                directions.push(dir);
+              }
+            }
+          });
+          return {
+            sortOption: 'name-asc', // Not used for multi-column
+            sortColumns: columns,
+            sortDirections: directions
+          };
+        } else {
+          // Single-column format: name-asc or rarity-asc
+          // Split on last hyphen to handle column names that might contain hyphens
+          const lastHyphenIndex = urlSort.lastIndexOf('-');
+          if (lastHyphenIndex > 0) {
+            const col = urlSort.substring(0, lastHyphenIndex).trim();
+            const dir = urlSort.substring(lastHyphenIndex + 1).trim();
+            if (col && dir && (dir === 'asc' || dir === 'desc')) {
+              // New format with explicit direction
+              return {
+                sortOption: 'name-asc', // Not used for multi-column
+                sortColumns: [col],
+                sortDirections: [dir]
+              };
+            }
+          }
+          // Legacy single-column format: name-asc
+          return {
+            sortOption: urlSort,
+            sortColumns: [],
+            sortDirections: []
+          };
+        }
+      } catch (e) {
+        console.error('Error parsing sort state from URL:', e);
+      }
+    }
+    
+    // Fall back to localStorage
+    try {
+      const saved = localStorage.getItem('deckBuilderSort');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          sortOption: parsed.sortOption || 'name-asc',
+          sortColumns: parsed.sortColumns || [],
+          sortDirections: parsed.sortDirections || []
+        };
+      }
+    } catch (e) {
+      console.error('Error loading sort state from localStorage:', e);
+    }
+    return {
+      sortOption: 'name-asc',
+      sortColumns: [],
+      sortDirections: []
+    };
+  };
+  const initialSortState = loadSortState();
+  const [sortOption, setSortOption] = useState(initialSortState.sortOption); // Legacy support
+  const [sortColumns, setSortColumns] = useState(initialSortState.sortColumns);
+  const [sortDirections, setSortDirections] = useState(initialSortState.sortDirections);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [favorites, setFavorites] = useState(new Set());
   const [showInDeckOnly, setShowInDeckOnly] = useState(false); // Default to false, will be set to true if deck has cards
@@ -181,6 +277,8 @@ const DeckBuilderPage = () => {
   const lastCategoryIdRef = useRef(null);
   const lastFilterParamsRef = useRef(null);
   const lastProductIdsRef = useRef('');
+  const isUpdatingFiltersFromUrlRef = useRef(false);
+  const isUpdatingSortFromUrlRef = useRef(false);
   const prevFilterStateRef = useRef({
     searchQuery: '',
     showFavoritesOnly: false,
@@ -220,6 +318,210 @@ const DeckBuilderPage = () => {
       setMaxPercentage(100);
     }
   }, [selectedTCGPercentage]);
+
+  // Save sort state to localStorage and URL whenever it changes
+  // URL format: sort=rarity:asc,level:desc or sort=name-asc (legacy)
+  useEffect(() => {
+    // Skip if we're updating from URL to prevent infinite loop
+    if (isUpdatingSortFromUrlRef.current) {
+      return;
+    }
+    
+    try {
+      // Save to localStorage
+      localStorage.setItem('deckBuilderSort', JSON.stringify({
+        sortOption,
+        sortColumns,
+        sortDirections
+      }));
+      
+      // Update URL params
+      const newSearchParams = new URLSearchParams(searchParams);
+      
+      // Remove old format params if they exist
+      newSearchParams.delete('sortOption');
+      newSearchParams.delete('sortColumns');
+      newSearchParams.delete('sortDirections');
+      
+      // Build the sort string
+      let sortStr = null;
+      if (sortColumns && sortColumns.length > 0) {
+        // Multi-column format: rarity-asc,level-desc
+        const sortParts = sortColumns.map((col, idx) => {
+          const dir = (sortDirections && sortDirections[idx]) || 'asc';
+          return `${col}-${dir}`;
+        });
+        sortStr = sortParts.join(',');
+      } else if (sortOption && sortOption !== 'name-asc') {
+        // Legacy single-column format: name-asc
+        sortStr = sortOption;
+      }
+      
+      // Only update if different from current URL
+      const currentSort = searchParams.get('sort');
+      if (sortStr !== currentSort) {
+        if (sortStr) {
+          newSearchParams.set('sort', sortStr);
+        } else {
+          newSearchParams.delete('sort');
+        }
+        setSearchParams(newSearchParams, { replace: true });
+      }
+    } catch (e) {
+      console.error('Error saving sort state:', e);
+    }
+  }, [sortOption, sortColumns, sortDirections, searchParams, setSearchParams]);
+
+  // Sync sort state from URL params when they change (but don't trigger save)
+  useEffect(() => {
+    const urlSort = searchParams.get('sort');
+    
+    // Only update if URL param exists
+    if (urlSort) {
+      try {
+        let urlSortOption = 'name-asc';
+        let urlColumns = [];
+        let urlDirections = [];
+        
+        // Check if it's multi-column format (contains commas)
+        if (urlSort.includes(',')) {
+          // Multi-column format: rarity-asc,level-desc
+          const parts = urlSort.split(',');
+          parts.forEach(part => {
+            // Split on last hyphen to handle column names that might contain hyphens
+            const lastHyphenIndex = part.lastIndexOf('-');
+            if (lastHyphenIndex > 0) {
+              const col = part.substring(0, lastHyphenIndex).trim();
+              const dir = part.substring(lastHyphenIndex + 1).trim();
+              if (col && dir) {
+                urlColumns.push(col);
+                urlDirections.push(dir);
+              }
+            }
+          });
+        } else {
+          // Single-column format: name-asc or rarity-asc
+          // Split on last hyphen to handle column names that might contain hyphens
+          const lastHyphenIndex = urlSort.lastIndexOf('-');
+          if (lastHyphenIndex > 0) {
+            const col = urlSort.substring(0, lastHyphenIndex).trim();
+            const dir = urlSort.substring(lastHyphenIndex + 1).trim();
+            if (col && dir && (dir === 'asc' || dir === 'desc')) {
+              // New format with explicit direction
+              urlColumns = [col];
+              urlDirections = [dir];
+            } else {
+              // Legacy single-column format: name-asc
+              urlSortOption = urlSort;
+            }
+          } else {
+            // Legacy single-column format: name-asc
+            urlSortOption = urlSort;
+          }
+        }
+        
+        // Always update from URL (URL is source of truth)
+        isUpdatingSortFromUrlRef.current = true;
+        setSortOption(urlSortOption);
+        setSortColumns(urlColumns);
+        setSortDirections(urlDirections);
+        // Reset flag after state update
+        setTimeout(() => {
+          isUpdatingSortFromUrlRef.current = false;
+        }, 0);
+      } catch (e) {
+        console.error('Error parsing sort state from URL:', e);
+      }
+    }
+    // If no sort in URL, don't change state (keep current or default)
+  }, [searchParams]); // Only depend on searchParams to avoid loops
+
+  // Sync attribute filters from URL params when they change
+  useEffect(() => {
+    const urlFilters = {};
+    searchParams.forEach((value, key) => {
+      if (key.startsWith('filter_')) {
+        const attributeName = key.substring(7); // Remove 'filter_' prefix
+        if (!urlFilters[attributeName]) {
+          urlFilters[attributeName] = [];
+        }
+        urlFilters[attributeName].push(value);
+      }
+    });
+    
+    // Only update if different from current state
+    const currentFiltersStr = JSON.stringify(attributeFilters);
+    const urlFiltersStr = JSON.stringify(urlFilters);
+    if (currentFiltersStr !== urlFiltersStr) {
+      isUpdatingFiltersFromUrlRef.current = true;
+      setAttributeFilters(urlFilters);
+      // Reset flag after state update
+      setTimeout(() => {
+        isUpdatingFiltersFromUrlRef.current = false;
+      }, 0);
+    }
+  }, [searchParams]); // Only depend on searchParams to avoid loops
+
+  // Update URL params when attribute filters change (but don't save to localStorage)
+  // Uses format: filter_Color=Red&filter_Color=Blue&filter_Rarity=SR
+  useEffect(() => {
+    // Skip if we're updating from URL to prevent infinite loop
+    if (isUpdatingFiltersFromUrlRef.current) {
+      return;
+    }
+    
+    const newSearchParams = new URLSearchParams(searchParams);
+    
+    // Remove all existing filter_ params
+    const keysToRemove = [];
+    newSearchParams.forEach((value, key) => {
+      if (key.startsWith('filter_')) {
+        keysToRemove.push(key);
+      }
+    });
+    keysToRemove.forEach(key => newSearchParams.delete(key));
+    
+    // Add current filters as separate params
+    if (attributeFilters && Object.keys(attributeFilters).length > 0) {
+      Object.keys(attributeFilters).forEach(key => {
+        const values = attributeFilters[key];
+        if (Array.isArray(values) && values.length > 0) {
+          values.forEach(value => {
+            newSearchParams.append(`filter_${key}`, value);
+          });
+        } else if (values && !Array.isArray(values)) {
+          newSearchParams.append(`filter_${key}`, values);
+        }
+      });
+    }
+    
+    // Only update if URL actually changed
+    const currentUrlFilters = {};
+    searchParams.forEach((value, key) => {
+      if (key.startsWith('filter_')) {
+        const attributeName = key.substring(7);
+        if (!currentUrlFilters[attributeName]) {
+          currentUrlFilters[attributeName] = [];
+        }
+        currentUrlFilters[attributeName].push(value);
+      }
+    });
+    
+    const newUrlFilters = {};
+    newSearchParams.forEach((value, key) => {
+      if (key.startsWith('filter_')) {
+        const attributeName = key.substring(7);
+        if (!newUrlFilters[attributeName]) {
+          newUrlFilters[attributeName] = [];
+        }
+        newUrlFilters[attributeName].push(value);
+      }
+    });
+    
+    if (JSON.stringify(currentUrlFilters) !== JSON.stringify(newUrlFilters)) {
+      setSearchParams(newSearchParams, { replace: true });
+    }
+  }, [attributeFilters, searchParams, setSearchParams]);
 
   useEffect(() => {
     // Load deck list regardless of authentication status (for public viewing)

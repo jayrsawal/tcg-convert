@@ -165,16 +165,14 @@ const ProductListingContent = ({
     }
     // Don't trigger loading if we have no filtered products (all filtered out)
     // This prevents infinite loading when filters exclude all products
-    // Also don't trigger if we have no products at all - that means the query returned no matches
-    if (filteredProducts.length === 0) {
+    if (filteredProducts.length === 0 && products.length > 0) {
       return;
     }
 
     const observer = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
-        // Double-check all conditions inside the callback to avoid stale closures
-        if (entry.isIntersecting && !loadingMore && hasMorePages && filteredProducts.length > 0) {
+        if (entry.isIntersecting && !loadingMore && hasMorePages) {
           // On initial mount, if sentinel is already visible, wait for user to scroll
           // This prevents auto-loading page 2 immediately on page load
           if (isInitialMountRef.current && !hasScrolledRef.current) {
@@ -182,9 +180,10 @@ const ProductListingContent = ({
             return;
           }
           
-          // Only load if we have filtered products
-          // Don't load if we have no products at all - that means the query returned no matches
-          onLoadMore();
+          // Only load if we have filtered products or no products at all
+          if (filteredProducts.length > 0 || products.length === 0) {
+            onLoadMore();
+          }
         }
       },
       {
