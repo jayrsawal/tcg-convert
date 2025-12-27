@@ -1111,42 +1111,104 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
   }, []);
 
   const loadAllProductsForSidebar = useCallback(async () => {
-    if (!categoryId || viewMode) return;
+    if (!categoryId || viewMode || !user) return;
     if (loadingAllProductsRef.current) return;
+    
+    // Wait for inventory to be loaded
+    if (Object.keys(inventory).length === 0) {
+      return;
+    }
 
     try {
       loadingAllProductsRef.current = true;
-      const apiSortParams = getAPISortParams();
-      const filterParams = {
-        category_id: parseInt(categoryId, 10),
-        filters: {},
-        ...apiSortParams
-      };
-
-      const response = await filterProducts(filterParams);
-      let productsData = [];
       
-      if (response && typeof response === 'object') {
-        if (response.data && Array.isArray(response.data)) {
-          productsData = response.data;
-        } else if (response.products && Array.isArray(response.products)) {
-          productsData = response.products;
-        } else if (response.results && Array.isArray(response.results)) {
-          productsData = response.results;
-        } else if (Array.isArray(response)) {
-          productsData = response;
+      // Get all product IDs from inventory that have quantity > 0
+      const inventoryProductIds = Object.keys(inventory)
+        .filter(productId => inventory[productId] > 0)
+        .map(id => parseInt(id, 10))
+        .filter(id => !isNaN(id));
+      
+      if (inventoryProductIds.length === 0) {
+        loadingAllProductsRef.current = false;
+        return;
+      }
+      
+      // Always use name-asc sort for sidebar to ensure consistent ordering
+      // This is independent of the product listings sort
+      const sidebarSortParams = {
+        sort_by: 'name',
+        sort_order: 'asc'
+      };
+      
+      // Fetch products in batches of 1000 (API limit)
+      const batches = [];
+      for (let i = 0; i < inventoryProductIds.length; i += 1000) {
+        batches.push(inventoryProductIds.slice(i, i + 1000));
+      }
+      
+      let allProductsData = [];
+      
+      for (const batch of batches) {
+        const filterParams = {
+          category_id: parseInt(categoryId, 10),
+          product_ids: batch,
+          ...sidebarSortParams,
+          page: 1,
+          limit: 1000
+        };
+        
+        let currentPage = 1;
+        let hasMore = true;
+        
+        // Fetch all pages for this batch
+        while (hasMore) {
+          const pageParams = {
+            ...filterParams,
+            page: currentPage
+          };
+          
+          const response = await filterProducts(pageParams);
+          let productsData = [];
+          
+          if (response && typeof response === 'object') {
+            if (response.data && Array.isArray(response.data)) {
+              productsData = response.data;
+            } else if (response.products && Array.isArray(response.products)) {
+              productsData = response.products;
+            } else if (response.results && Array.isArray(response.results)) {
+              productsData = response.results;
+            } else if (Array.isArray(response)) {
+              productsData = response;
+            }
+            
+            // Check if there are more pages
+            hasMore = response.has_more !== undefined ? response.has_more : (productsData.length === filterParams.limit);
+          }
+          
+          if (productsData.length > 0) {
+            allProductsData.push(...productsData);
+          }
+          
+          // Safety limit: don't fetch more than 50 pages per batch
+          if (currentPage >= 50 || !hasMore || productsData.length < filterParams.limit) {
+            hasMore = false;
+          } else {
+            currentPage++;
+          }
         }
       }
-
-      // Merge into products map instead of replacing allProducts
-      mergeProductsIntoMap(productsData);
-      loadProductExtendedData(productsData);
+      
+      // Merge all products into products map
+      if (allProductsData.length > 0) {
+        mergeProductsIntoMap(allProductsData);
+        loadProductExtendedData(allProductsData);
+      }
     } catch (err) {
-      console.error('Error loading all products:', err);
+      console.error('Error loading all products for sidebar:', err);
     } finally {
       loadingAllProductsRef.current = false;
     }
-  }, [categoryId, viewMode, mergeProductsIntoMap, sortOption, sortColumns, sortDirections, loadProductExtendedData, getAPISortParams]);
+  }, [categoryId, viewMode, user, inventory, mergeProductsIntoMap, loadProductExtendedData]);
 
   const loadPricesForInventoryProducts = useCallback(async () => {
     const allProductsArray = Object.values(productsMap);
@@ -1212,11 +1274,12 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
       });
     }
 
-    // Sort - only apply client-side sorting if NOT using multi-column API sort
-    // When using multi-column sort (sortColumns.length > 0), the API already sorted the products
-    // so we should preserve that order
-    if (!sortColumns || sortColumns.length === 0) {
-      // Legacy single-column client-side sorting
+    // Sort - only apply client-side sorting if:
+    // 1. NOT using multi-column API sort (API already sorted those)
+    // 2. AND there's an explicit sort applied (not the default name-asc)
+    // When no sort is applied, preserve the API order to avoid reordering as new products load
+    if ((!sortColumns || sortColumns.length === 0) && sortOption && sortOption !== 'name-asc') {
+      // Legacy single-column client-side sorting (only when explicit sort is applied)
       filtered.sort((a, b) => {
         if (sortOption.startsWith('name')) {
           const aName = (a.name || '').toLowerCase();
@@ -1240,7 +1303,7 @@ const ProductsPage = ({ isViewOnly: propIsViewOnly = false }) => {
         return sortOption.includes('desc') ? bId - aId : aId - bId;
       });
     }
-    // If using multi-column sort, products are already sorted by the API, so we preserve that order
+    // If using multi-column sort or default sort, products are already sorted by the API, so we preserve that order
 
     setFilteredProducts(filtered);
     
@@ -1346,6 +1409,13 @@ useEffect(() => {
       loadFavorites();
     }
   }, [user, viewMode, loadInventory, loadFavorites]);
+  
+  // Load all inventory products for sidebar when inventory is loaded
+  useEffect(() => {
+    if (user && !viewMode && Object.keys(inventory).length > 0 && categoryId) {
+      loadAllProductsForSidebar();
+    }
+  }, [user, viewMode, inventory, categoryId, loadAllProductsForSidebar]);
 
   useEffect(() => {
     if (!viewMode || !viewedUsername) {

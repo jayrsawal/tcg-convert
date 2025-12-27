@@ -806,11 +806,12 @@ const DeckBuilderPage = () => {
       });
     }
 
-    // Sort - only apply client-side sorting if NOT using multi-column API sort
-    // When using multi-column sort (sortColumns.length > 0), the API already sorted the products
-    // so we should preserve that order
-    if (!sortColumns || sortColumns.length === 0) {
-      // Legacy single-column client-side sorting
+    // Sort - only apply client-side sorting if:
+    // 1. NOT using multi-column API sort (API already sorted those)
+    // 2. AND there's an explicit sort applied (not the default name-asc)
+    // When no sort is applied, preserve the API order to avoid reordering as new products load
+    if ((!sortColumns || sortColumns.length === 0) && sortOption && sortOption !== 'name-asc') {
+      // Legacy single-column client-side sorting (only when explicit sort is applied)
       filtered.sort((a, b) => {
         if (sortOption === 'name-asc' || sortOption === 'name-desc') {
           const aName = (a.name || '').toLowerCase();
@@ -832,7 +833,7 @@ const DeckBuilderPage = () => {
         return 0;
       });
     }
-    // If using multi-column sort, products are already sorted by the API, so we preserve that order
+    // If using multi-column sort or default sort, products are already sorted by the API, so we preserve that order
 
     setFilteredProducts(filtered);
     
