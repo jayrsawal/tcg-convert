@@ -24,6 +24,7 @@ from src.routers import (
     deck_lists,
     profiles,
     vendor_prices,
+    feedback,
 )
 
 # Load environment variables from .env file (if present)
@@ -131,6 +132,7 @@ app.include_router(user_inventory.router)
 app.include_router(deck_lists.router)
 app.include_router(profiles.router)
 app.include_router(vendor_prices.router)
+app.include_router(feedback.router)
 
 # Serve static files (HTML documentation)
 app.mount("/static", StaticFiles(directory="src/static"), name="static")

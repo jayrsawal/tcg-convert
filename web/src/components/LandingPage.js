@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { fetchCategories, fetchInventoryStatsByCategory, fetchProductCountsByCategory, fetchCurrentPricesBulk } from '../lib/api';
+import { fetchCategories, fetchInventoryStatsByCategory, fetchProductCountsByCategory, fetchCurrentPricesBulk, submitFeedback } from '../lib/api';
 import { getUserInventory } from '../lib/inventory';
 import NavigationBar from './NavigationBar';
 import DecksSection from './DecksSection';
+import FeedbackModal from './FeedbackModal';
+import NotificationModal from './NotificationModal';
 import './LandingPage.css';
 import './DeckListsPage.css';
 
@@ -16,6 +18,9 @@ const LandingPage = () => {
   const [totalInventoryValue, setTotalInventoryValue] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  const [notification, setNotification] = useState({ isOpen: false, title: '', message: '', type: 'info' });
   const heroLogoUrl = `${process.env.PUBLIC_URL || ''}/strikerpack-1.png`;
 
   const loadCategories = useCallback(async () => {
@@ -171,6 +176,30 @@ const LandingPage = () => {
     navigate('/inventory');
   };
 
+  const handleFeedbackSubmit = async (feedbackData) => {
+    try {
+      setIsSubmittingFeedback(true);
+      await submitFeedback(feedbackData.feedback, feedbackData.email);
+      setShowFeedbackModal(false);
+      setNotification({
+        isOpen: true,
+        title: 'Feedback Sent',
+        message: 'Thank you for your feedback! We appreciate your input.',
+        type: 'success'
+      });
+    } catch (err) {
+      console.error('Error submitting feedback:', err);
+      setNotification({
+        isOpen: true,
+        title: 'Error',
+        message: 'Failed to send feedback. Please try again later.',
+        type: 'error'
+      });
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
+  };
+
   return (
     <div className="landing-page" style={{ '--app-bg-logo': `url(${heroLogoUrl})` }}>
       <NavigationBar className="landing-header" />
@@ -179,6 +208,42 @@ const LandingPage = () => {
         {/* <div className="hero-section">
           <img className="hero-logo" src="/strikerpack-1.png" alt="Striker Pack!" />
         </div> */}
+
+        {/* Developer Updates Section */}
+        <div className="developer-updates-section">
+          <div className="developer-updates-header">
+            <h2 className="developer-updates-title">Developer Updates</h2>
+            <div className="developer-updates-date">December 30, 2024</div>
+          </div>
+          <div className="developer-updates-content">
+            <div className="update-item">
+              <div className="update-text">
+                <strong>Deck Privacy & Trading Status</strong> — Set decks as private/public and trading status (WTS/WTB/Play) via the settings modal.
+              </div>
+            </div>
+            <div className="update-item">
+              <div className="update-text">
+                <strong>Deck Browser & Filters</strong> — Browse public decks with color and status filters.
+              </div>
+            </div>
+            <div className="update-item">
+              <div className="update-text">
+                <strong>Automatic Color Detection & Tags</strong> — Deck colors auto-detected. Visual tags show visibility and status.
+              </div>
+            </div>
+          </div>
+          <div className="developer-updates-cta">
+            <Link to="/deck-lists" className="developer-updates-button">
+              Explore Decks
+            </Link>
+            <button 
+              className="developer-updates-button developer-updates-button-secondary"
+              onClick={() => setShowFeedbackModal(true)}
+            >
+              Leave Feedback
+            </button>
+          </div>
+        </div>
 
         <div className="categories-section">          
           {loading && (
@@ -244,7 +309,7 @@ const LandingPage = () => {
             <Link to="/deck-lists" className="view-more-link">View More →</Link>
           </div>
           <DecksSection 
-            user={null}
+            user={user}
             categoryId={86}
             showAddDeck={false}
             maxDecks={4}
@@ -255,6 +320,21 @@ const LandingPage = () => {
           />
         </div>
       </main>
+
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+        onSubmit={handleFeedbackSubmit}
+        isSubmitting={isSubmittingFeedback}
+      />
+
+      <NotificationModal
+        isOpen={notification.isOpen}
+        onClose={() => setNotification({ ...notification, isOpen: false })}
+        title={notification.title}
+        message={notification.message}
+        type={notification.type}
+      />
     </div>
   );
 };

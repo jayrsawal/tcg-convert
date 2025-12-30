@@ -1084,9 +1084,10 @@ export const fetchDeckList = async (deckListId, userId = null) => {
  * @param {number} categoryId - Category ID
  * @param {string} name - Deck list name
  * @param {Object} items - Optional initial items map (product_id to quantity)
+ * @param {Object} options - Optional fields: color_1, color_2, strategy, selling, buying, private
  * @returns {Promise<Object>} Created deck list object
  */
-export const createDeckList = async (userId, categoryId, name, items = {}) => {
+export const createDeckList = async (userId, categoryId, name, items = {}, options = {}) => {
   try {
     const url = API_BASE_URL ? `${API_BASE_URL}/deck-lists/` : '/deck-lists/';
     
@@ -1096,6 +1097,14 @@ export const createDeckList = async (userId, categoryId, name, items = {}) => {
       name: name,
       items: items
     };
+    
+    // Add optional fields if provided
+    if (options.color_1 !== undefined) requestBody.color_1 = options.color_1;
+    if (options.color_2 !== undefined) requestBody.color_2 = options.color_2;
+    if (options.strategy !== undefined) requestBody.strategy = options.strategy;
+    if (options.selling !== undefined) requestBody.selling = options.selling;
+    if (options.buying !== undefined) requestBody.buying = options.buying;
+    if (options.private !== undefined) requestBody.private = options.private;
     
     console.log('Creating deck list:', requestBody);
     
@@ -1122,13 +1131,14 @@ export const createDeckList = async (userId, categoryId, name, items = {}) => {
 };
 
 /**
- * Update a deck list's name
+ * Update a deck list's name and optional metadata fields
  * @param {number} deckListId - Deck list ID
  * @param {string} userId - User ID (UUID)
  * @param {string} name - New name for the deck list
+ * @param {Object} options - Optional fields to update: color_1, color_2, strategy, selling, buying, private
  * @returns {Promise<Object>} Updated deck list object
  */
-export const updateDeckListName = async (deckListId, userId, name) => {
+export const updateDeckListName = async (deckListId, userId, name, options = {}) => {
   try {
     const url = API_BASE_URL 
       ? `${API_BASE_URL}/deck-lists/${deckListId}`
@@ -1138,6 +1148,14 @@ export const updateDeckListName = async (deckListId, userId, name) => {
       user_id: userId,
       name: name
     };
+    
+    // Add optional fields if provided
+    if (options.color_1 !== undefined) requestBody.color_1 = options.color_1;
+    if (options.color_2 !== undefined) requestBody.color_2 = options.color_2;
+    if (options.strategy !== undefined) requestBody.strategy = options.strategy;
+    if (options.selling !== undefined) requestBody.selling = options.selling;
+    if (options.buying !== undefined) requestBody.buying = options.buying;
+    if (options.private !== undefined) requestBody.private = options.private;
     
     console.log('Updating deck list name:', requestBody);
     
@@ -1199,13 +1217,14 @@ export const deleteDeckList = async (deckListId, userId) => {
 };
 
 /**
- * Update deck list items (bulk upsert)
+ * Update deck list items (bulk upsert) and optional metadata fields
  * @param {number} deckListId - Deck list ID
  * @param {string} userId - User ID (UUID)
  * @param {Object} items - Map of product_id (int or string) to quantity (int, min: 1)
+ * @param {Object} options - Optional fields to update: color_1, color_2, strategy, selling, buying, private
  * @returns {Promise<Object>} Response with results
  */
-export const updateDeckListItems = async (deckListId, userId, items) => {
+export const updateDeckListItems = async (deckListId, userId, items, options = {}) => {
   try {
     const url = API_BASE_URL 
       ? `${API_BASE_URL}/deck-lists/${deckListId}/items`
@@ -1223,9 +1242,12 @@ export const updateDeckListItems = async (deckListId, userId, items) => {
       }
     });
     
-    // Don't send request if no valid items to update
-    if (Object.keys(normalizedItems).length === 0) {
-      console.log('No valid items to update, skipping API call');
+    // Don't send request if no valid items to update and no metadata fields to update
+    if (Object.keys(normalizedItems).length === 0 && 
+        options.color_1 === undefined && options.color_2 === undefined && 
+        options.strategy === undefined && options.selling === undefined && 
+        options.buying === undefined && options.private === undefined) {
+      console.log('No valid items or metadata to update, skipping API call');
       return { updated: 0 };
     }
     
@@ -1233,6 +1255,14 @@ export const updateDeckListItems = async (deckListId, userId, items) => {
       user_id: userId,
       items: normalizedItems
     };
+    
+    // Add optional fields if provided
+    if (options.color_1 !== undefined) requestBody.color_1 = options.color_1;
+    if (options.color_2 !== undefined) requestBody.color_2 = options.color_2;
+    if (options.strategy !== undefined) requestBody.strategy = options.strategy;
+    if (options.selling !== undefined) requestBody.selling = options.selling;
+    if (options.buying !== undefined) requestBody.buying = options.buying;
+    if (options.private !== undefined) requestBody.private = options.private;
     
     console.log('Updating deck list items:', requestBody);
     
@@ -1560,6 +1590,48 @@ export const updateUserTcgPercentage = async (userId, tcgPercentage) => {
     return await postResponse.json();
   } catch (error) {
     console.error('Error updating user TCG percentage:', error);
+    throw error;
+  }
+};
+
+/**
+ * Submit user feedback
+ * @param {string} feedback - Feedback text (required)
+ * @param {string} [email] - Optional email address
+ * @returns {Promise<Object>} Response object
+ */
+export const submitFeedback = async (feedback, email = null) => {
+  try {
+    const url = API_BASE_URL ? `${API_BASE_URL}/feedback/` : '/feedback/';
+    
+    const requestBody = {
+      message: feedback
+    };
+    
+    if (email) {
+      requestBody.email = email;
+    }
+    
+    console.log('Submitting feedback:', requestBody);
+    
+    const headers = await getAuthHeaders();
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('API Error Response:', errorText);
+      throw new Error(`Failed to submit feedback: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    console.log('Submit feedback response:', data);
+    return data;
+  } catch (error) {
+    console.error('Error submitting feedback:', error);
     throw error;
   }
 };

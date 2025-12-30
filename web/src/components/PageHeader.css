@@ -19,6 +19,13 @@
 
 .page-header-title-section {
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.page-header-title-wrapper {
+  display: flex;
   align-items: center;
   gap: 12px;
 }
@@ -47,6 +54,27 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   opacity: 0.85;
+}
+
+.page-header-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.page-header-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .page-header-edit {
@@ -101,6 +129,28 @@
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.settings-icon-button {
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.0);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.0);
+  border-radius: 6px;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.settings-icon-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-1px);
 }
 
 .import-export-button-header {

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import NavigationBar from './NavigationBar';
 import DecksSection from './DecksSection';
+import DeckSearchSection from './DeckSearchSection';
 import './DeckListsPage.css';
 
 const DeckListsPage = () => {
@@ -72,6 +73,13 @@ const DeckListsPage = () => {
               />
             </div>
           )}
+          
+          <div className="deck-search-layout" style={{ marginTop: '3rem' }}>
+            <DeckSearchSection 
+              categoryId={selectedCategoryId}
+              currentUserId={user?.id}
+            />
+          </div>
         </div>
       </main>
     </div>

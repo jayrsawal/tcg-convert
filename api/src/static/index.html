@@ -2061,7 +2061,15 @@ Headers: Authorization: Bearer &lt;token&gt;
                             <span class="schema-field-name">items</span> <span class="schema-field-type">jsonb (default: {}, dict of product_id string -> quantity integer)</span><br>
                             <span class="schema-field-name">created_at</span> <span class="schema-field-type">timestamp with time zone (required)</span><br>
                             <span class="schema-field-name">updated_at</span> <span class="schema-field-type">timestamp with time zone (required)</span><br>
-                            <span class="schema-field-name">card_count</span> <span class="schema-field-type">integer (required, default: 0)</span>
+                            <span class="schema-field-name">card_count</span> <span class="schema-field-type">integer (required, default: 0)</span><br>
+                            <span class="schema-field-name">meta</span> <span class="schema-field-type">text (optional)</span> - Generic metadata field<br>
+                            <span class="schema-field-name">color_1</span> <span class="schema-field-type">text (optional)</span> - Primary color of the deck<br>
+                            <span class="schema-field-name">color_2</span> <span class="schema-field-type">text (optional)</span> - Secondary color of the deck<br>
+                            <span class="schema-field-name">strategy</span> <span class="schema-field-type">text (optional)</span> - Strategy description for the deck<br>
+                            <span class="schema-field-name">selling</span> <span class="schema-field-type">boolean (optional, default: false)</span> - Whether the deck list is marked for selling<br>
+                            <span class="schema-field-name">buying</span> <span class="schema-field-type">boolean (optional, default: false)</span> - Whether the deck list is marked for buying<br>
+                            <span class="schema-field-name">private</span> <span class="schema-field-type">boolean (optional, default: false)</span> - Whether the deck list is private<br>
+                            <span class="schema-field-name">username</span> <span class="schema-field-type">string (optional)</span> - Username of the deck list creator
                         </div>
                     </div>
                 </div>
@@ -2140,6 +2148,27 @@ Headers: Authorization: Bearer &lt;token&gt;
                     <div class="param">
                         <span class="param-name">items</span> <span class="param-type">(object, optional)</span> - Dictionary of product_id (string) -> quantity (int)
                     </div>
+                    <div class="param">
+                        <span class="param-name">meta</span> <span class="param-type">(string, optional)</span> - Generic metadata field
+                    </div>
+                    <div class="param">
+                        <span class="param-name">color_1</span> <span class="param-type">(string, optional)</span> - Primary color of the deck
+                    </div>
+                    <div class="param">
+                        <span class="param-name">color_2</span> <span class="param-type">(string, optional)</span> - Secondary color of the deck
+                    </div>
+                    <div class="param">
+                        <span class="param-name">strategy</span> <span class="param-type">(string, optional)</span> - Strategy description for the deck
+                    </div>
+                    <div class="param">
+                        <span class="param-name">selling</span> <span class="param-type">(boolean, optional, default: false)</span> - Whether the deck list is marked for selling
+                    </div>
+                    <div class="param">
+                        <span class="param-name">buying</span> <span class="param-type">(boolean, optional, default: false)</span> - Whether the deck list is marked for buying
+                    </div>
+                    <div class="param">
+                        <span class="param-name">private</span> <span class="param-type">(boolean, optional, default: false)</span> - Whether the deck list is private
+                    </div>
                 </div>
                 <div class="example">
                     <h4>Example Request:</h4>
@@ -2173,6 +2202,27 @@ Headers: Authorization: Bearer &lt;token&gt;
                     <div class="param">
                         <span class="param-name">name</span> <span class="param-type">(string, optional)</span> - New name for the deck list
                     </div>
+                    <div class="param">
+                        <span class="param-name">meta</span> <span class="param-type">(string, optional)</span> - Generic metadata field
+                    </div>
+                    <div class="param">
+                        <span class="param-name">color_1</span> <span class="param-type">(string, optional)</span> - Primary color of the deck
+                    </div>
+                    <div class="param">
+                        <span class="param-name">color_2</span> <span class="param-type">(string, optional)</span> - Secondary color of the deck
+                    </div>
+                    <div class="param">
+                        <span class="param-name">strategy</span> <span class="param-type">(string, optional)</span> - Strategy description for the deck
+                    </div>
+                    <div class="param">
+                        <span class="param-name">selling</span> <span class="param-type">(boolean, optional)</span> - Whether the deck list is marked for selling
+                    </div>
+                    <div class="param">
+                        <span class="param-name">buying</span> <span class="param-type">(boolean, optional)</span> - Whether the deck list is marked for buying
+                    </div>
+                    <div class="param">
+                        <span class="param-name">private</span> <span class="param-type">(boolean, optional)</span> - Whether the deck list is private
+                    </div>
                 </div>
                 <div class="example">
                     <h4>Example Request:</h4>
@@ -2200,7 +2250,7 @@ Headers: Authorization: Bearer &lt;token&gt;
                     <span class="endpoint-path">/deck-lists/{deck_list_id}/items</span>
                 </div>
                 <div class="endpoint-description">
-                    Update items in a deck list for the current user. This is the <strong>only</strong> endpoint for updating deck list items. Merges new items with existing items. Items with quantity 0 are automatically removed. <span style="color: #ffc107;">🔒 Requires Authentication</span><br>
+                    Update items and cache fields in a deck list for the current user. This is the <strong>only</strong> endpoint for updating deck list items. Merges new items with existing items. Items with quantity 0 are automatically removed. Also supports updating cache fields (color_1, color_2, strategy, selling, buying, private) in the same call. <span style="color: #ffc107;">🔒 Requires Authentication</span><br>
                     <strong>Format:</strong> JSON object where keys are product_id strings (e.g., "12345") and values are integer quantities (e.g., 4).
                 </div>
                 <div class="endpoint-params">
@@ -2212,6 +2262,24 @@ Headers: Authorization: Bearer &lt;token&gt;
                     <div class="param">
                         <span class="param-name">items</span> <span class="param-type">(object, required)</span> - Dictionary of product_id (string) -> quantity (integer). New items are merged with existing items, overriding duplicates.
                     </div>
+                    <div class="param">
+                        <span class="param-name">color_1</span> <span class="param-type">(string, optional)</span> - Primary color of the deck
+                    </div>
+                    <div class="param">
+                        <span class="param-name">color_2</span> <span class="param-type">(string, optional)</span> - Secondary color of the deck
+                    </div>
+                    <div class="param">
+                        <span class="param-name">strategy</span> <span class="param-type">(string, optional)</span> - Strategy description for the deck
+                    </div>
+                    <div class="param">
+                        <span class="param-name">selling</span> <span class="param-type">(boolean, optional)</span> - Whether the deck list is marked for selling
+                    </div>
+                    <div class="param">
+                        <span class="param-name">buying</span> <span class="param-type">(boolean, optional)</span> - Whether the deck list is marked for buying
+                    </div>
+                    <div class="param">
+                        <span class="param-name">private</span> <span class="param-type">(boolean, optional)</span> - Whether the deck list is private
+                    </div>
                 </div>
                 <div class="example">
                     <h4>Example Request:</h4>
@@ -2222,7 +2290,13 @@ Headers: Authorization: Bearer &lt;token&gt;
     "12345": 4,
     "67890": 2,
     "11111": 1
-  }
+  },
+  "color_1": "Red",
+  "color_2": "Blue",
+  "strategy": "Aggressive",
+  "selling": false,
+  "buying": true,
+  "private": false
 }</code>
                 </div>
                 <div class="response-schema">
@@ -2242,6 +2316,14 @@ Headers: Authorization: Bearer &lt;token&gt;
     "11111": 1
   },
   "card_count": 7,
+  "meta": null,
+  "color_1": "Red",
+  "color_2": "Blue",
+  "strategy": "Aggressive",
+  "selling": false,
+  "buying": true,
+  "private": false,
+  "username": "john_doe",
   "created_at": "2024-01-15T10:30:00Z",
   "updated_at": "2024-01-20T08:00:00Z"
 }</code>
@@ -2291,6 +2373,110 @@ Headers: Authorization: Bearer &lt;token&gt;
   "card_count": 1,
   "created_at": "2024-01-15T10:30:00Z",
   "updated_at": "2024-01-20T08:00:00Z"
+}</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- Feedback Section -->
+        <div class="section">
+            <h2 class="section-title">Feedback</h2>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/feedback</span>
+                </div>
+                <div class="endpoint-description">
+                    Submit feedback or a note to the developers. Public endpoint - authentication is optional. If authenticated, user_id will be automatically included. All feedback is saved to the database. Email addresses are stored for manual review only - no automatic emails are sent.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Headers:</h4>
+                    <div class="param">
+                        <span class="param-name">Authorization</span> <span class="param-type">(string, optional)</span> - Bearer token (optional - if provided, user_id will be included)
+                    </div>
+                    <h4>Request Body:</h4>
+                    <div class="param">
+                        <span class="param-name">message</span> <span class="param-type">(string, required)</span> - Feedback message (required)
+                    </div>
+                    <div class="param">
+                        <span class="param-name">subject</span> <span class="param-type">(string, optional)</span> - Optional subject line for the feedback
+                    </div>
+                    <div class="param">
+                        <span class="param-name">email</span> <span class="param-type">(string, optional)</span> - Optional email address (stored in database for manual review, no automatic emails sent). No format validation.
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">POST /feedback</span>
+Headers: Authorization: Bearer &lt;token&gt; (optional)
+{
+  "message": "Great app! I found a bug where...",
+  "subject": "Bug Report",
+  "email": "user@example.com"
+}</code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>{
+  "feedback_id": bigint,
+  "message": string,
+  "created_at": timestamp
+}</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "feedback_id": 1,
+  "message": "Feedback submitted successfully",
+  "created_at": "2024-01-20T08:00:00Z"
+}</code>
+                </div>
+            </div>
+
+            <div class="endpoint">
+                <div class="endpoint-header">
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/feedback/anonymous</span>
+                </div>
+                <div class="endpoint-description">
+                    Submit feedback anonymously (without authentication). This endpoint does not require authentication and will not include a user_id. Useful for users who want to provide feedback without logging in.
+                </div>
+                <div class="endpoint-params">
+                    <h4>Request Body:</h4>
+                    <div class="param">
+                        <span class="param-name">message</span> <span class="param-type">(string, required)</span> - Feedback message (required)
+                    </div>
+                    <div class="param">
+                        <span class="param-name">subject</span> <span class="param-type">(string, optional)</span> - Optional subject line for the feedback
+                    </div>
+                    <div class="param">
+                        <span class="param-name">email</span> <span class="param-type">(string, optional)</span> - Optional email address (stored in database for manual review, no automatic emails sent). No format validation.
+                    </div>
+                </div>
+                <div class="example">
+                    <h4>Example Request:</h4>
+                    <code><span class="example-url">POST /feedback/anonymous</span>
+{
+  "message": "I love this app!",
+  "subject": "Positive Feedback",
+  "email": "anonymous@example.com"
+}</code>
+                </div>
+                <div class="response-schema">
+                    <h4>Response Schema:</h4>
+                    <code>{
+  "feedback_id": bigint,
+  "message": string,
+  "created_at": timestamp
+}</code>
+                </div>
+                <div class="response">
+                    <h4>Example Response:</h4>
+                    <code>{
+  "feedback_id": 2,
+  "message": "Feedback submitted successfully",
+  "created_at": "2024-01-20T08:00:00Z"
 }</code>
                 </div>
             </div>

@@ -19,17 +19,35 @@ class DeckListCreate(BaseModel):
     name: str
     items: Dict[str, int] = Field(default_factory=dict, description="Dictionary of product_id -> quantity")
     meta: Optional[str] = Field(None, description="Generic metadata field. Can be used for encoded color/quantity information in format '{color_1}{quantity_1}-{color_2}{quantity_2}'. Example: 'R3-G2-B1'")
+    color_1: Optional[str] = Field(None, description="Primary color of the deck")
+    color_2: Optional[str] = Field(None, description="Secondary color of the deck")
+    strategy: Optional[str] = Field(None, description="Strategy description for the deck")
+    selling: Optional[bool] = Field(False, description="Whether the deck list is marked for selling")
+    buying: Optional[bool] = Field(False, description="Whether the deck list is marked for buying")
+    private: Optional[bool] = Field(False, description="Whether the deck list is private")
 
 
 class DeckListUpdate(BaseModel):
     """Model for updating a deck list (name and meta). Items should be updated via POST /items endpoint."""
     name: Optional[str] = None
     meta: Optional[str] = Field(None, description="Generic metadata field. Can be used for encoded color/quantity information in format '{color_1}{quantity_1}-{color_2}{quantity_2}'. Example: 'R3-G2-B1'")
+    color_1: Optional[str] = Field(None, description="Primary color of the deck")
+    color_2: Optional[str] = Field(None, description="Secondary color of the deck")
+    strategy: Optional[str] = Field(None, description="Strategy description for the deck")
+    selling: Optional[bool] = Field(None, description="Whether the deck list is marked for selling")
+    buying: Optional[bool] = Field(None, description="Whether the deck list is marked for buying")
+    private: Optional[bool] = Field(None, description="Whether the deck list is private")
 
 
 class DeckListItemsUpdate(BaseModel):
-    """Model for updating deck list items."""
+    """Model for updating deck list items and cache fields."""
     items: Dict[str, int] = Field(..., description="Dictionary of product_id -> quantity")
+    color_1: Optional[str] = Field(None, description="Primary color of the deck")
+    color_2: Optional[str] = Field(None, description="Secondary color of the deck")
+    strategy: Optional[str] = Field(None, description="Strategy description for the deck")
+    selling: Optional[bool] = Field(None, description="Whether the deck list is marked for selling")
+    buying: Optional[bool] = Field(None, description="Whether the deck list is marked for buying")
+    private: Optional[bool] = Field(None, description="Whether the deck list is private")
 
 
 class DeckListItemsDelete(BaseModel):
@@ -234,9 +252,21 @@ async def create_deck_list(
             "card_count": card_count
         }
         
-        # Add meta if provided
+        # Add optional fields if provided
         if deck_list.meta is not None:
             insert_payload["meta"] = deck_list.meta
+        if deck_list.color_1 is not None:
+            insert_payload["color_1"] = deck_list.color_1
+        if deck_list.color_2 is not None:
+            insert_payload["color_2"] = deck_list.color_2
+        if deck_list.strategy is not None:
+            insert_payload["strategy"] = deck_list.strategy
+        if deck_list.selling is not None:
+            insert_payload["selling"] = deck_list.selling
+        if deck_list.buying is not None:
+            insert_payload["buying"] = deck_list.buying
+        if deck_list.private is not None:
+            insert_payload["private"] = deck_list.private
         
         response = (
             db.table("deck_lists")
@@ -378,6 +408,18 @@ async def update_deck_list(
             update_payload["name"] = deck_list.name
         if deck_list.meta is not None:
             update_payload["meta"] = deck_list.meta
+        if deck_list.color_1 is not None:
+            update_payload["color_1"] = deck_list.color_1
+        if deck_list.color_2 is not None:
+            update_payload["color_2"] = deck_list.color_2
+        if deck_list.strategy is not None:
+            update_payload["strategy"] = deck_list.strategy
+        if deck_list.selling is not None:
+            update_payload["selling"] = deck_list.selling
+        if deck_list.buying is not None:
+            update_payload["buying"] = deck_list.buying
+        if deck_list.private is not None:
+            update_payload["private"] = deck_list.private
         
         # If no fields to update, return existing
         if not update_payload:
@@ -479,9 +521,10 @@ async def update_deck_list_items(
     db: Client = Depends(get_db_client)
 ):
     """
-    Update items in a deck list for the current user.
+    Update items and cache fields in a deck list for the current user.
     Merges new items with existing items.
     Items format: JSON object where keys are product_id strings and values are integer quantities.
+    Also supports updating cache fields: color_1, color_2, strategy, selling, buying, private.
     """
     try:
         # Get existing deck list
@@ -542,14 +585,31 @@ async def update_deck_list_items(
         # Calculate card count
         card_count = sum(merged_items.values())
         
+        # Build update payload with items and optional cache fields
+        update_payload = {
+            "items": merged_items,
+            "card_count": card_count
+        }
+        
+        # Add optional cache fields if provided
+        if items_update.color_1 is not None:
+            update_payload["color_1"] = items_update.color_1
+        if items_update.color_2 is not None:
+            update_payload["color_2"] = items_update.color_2
+        if items_update.strategy is not None:
+            update_payload["strategy"] = items_update.strategy
+        if items_update.selling is not None:
+            update_payload["selling"] = items_update.selling
+        if items_update.buying is not None:
+            update_payload["buying"] = items_update.buying
+        if items_update.private is not None:
+            update_payload["private"] = items_update.private
+        
         # Update the deck list
         # Note: Database trigger will also update card_count, but we calculate it here for consistency
         response = (
             db.table("deck_lists")
-            .update({
-                "items": merged_items,
-                "card_count": card_count
-            })
+            .update(update_payload)
             .eq("deck_list_id", deck_list_id)
             .eq("user_id", str(user_id))
             .execute()

@@ -225,6 +225,7 @@
   justify-content: center;
   gap: 24px;
   flex-wrap: wrap;
+  width: 100%
 }
 
 .category-card {
@@ -234,8 +235,7 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   cursor: pointer;
   transition: all 0.3s ease;
-  min-width: 300px;
-  max-width: 400px;
+  min-width: 100%;
   position: relative;
   overflow: hidden;
 }
@@ -304,6 +304,108 @@
 .category-card:hover .category-arrow {
   opacity: 1;
   transform: translateX(4px);
+}
+
+.developer-updates-section {
+  background: white;
+  border-radius: 16px;
+  padding: 48px;
+  margin-bottom: 60px;
+  border: 1px solid #e2e8f0;
+}
+
+.developer-updates-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.developer-updates-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+
+.developer-updates-date {
+  font-size: 14px;
+  font-weight: 400;
+  color: #718096;
+  letter-spacing: 0.2px;
+}
+
+.developer-updates-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.update-item {
+  padding: 0;
+  transition: all 0.2s ease;
+}
+
+.update-text {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #4a5568;
+  margin: 0;
+  letter-spacing: -0.1px;
+}
+
+.update-text strong {
+  color: #1a202c;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.developer-updates-cta {
+  text-align: left;
+  padding-top: 24px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.developer-updates-button {
+  display: inline-block;
+  padding: 10px 20px;
+  background: transparent;
+  color: #667eea;
+  text-decoration: none;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border: 1px solid #667eea;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.developer-updates-button:hover {
+  background: #667eea;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+}
+
+.developer-updates-button-secondary {
+  color: #718096;
+  border-color: #cbd5e0;
+}
+
+.developer-updates-button-secondary:hover {
+  background: #f7fafc;
+  color: #4a5568;
+  border-color: #cbd5e0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .decks-section-home {

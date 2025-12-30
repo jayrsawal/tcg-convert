@@ -20,7 +20,7 @@
   border-radius: 12px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
   z-index: 1001;
-  min-width: 400px;
+  width: calc(100% - 40px);
   max-width: 500px;
 }
 

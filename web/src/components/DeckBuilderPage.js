@@ -18,6 +18,7 @@ import NotificationModal from './NotificationModal';
 import ConfirmationModal from './ConfirmationModal';
 import ExportDeckModal from './ExportDeckModal';
 import DeckNamePromptModal from './DeckNamePromptModal';
+import DeckSettingsModal from './DeckSettingsModal';
 import PageHeader from './PageHeader';
 import ProductListingContent from './ProductListingContent';
 import DeckDeltaConfirmation from './DeckDeltaConfirmation';
@@ -167,7 +168,6 @@ const DeckBuilderPage = () => {
   const [loadingAttributes, setLoadingAttributes] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
-  const [editingDeckName, setEditingDeckName] = useState(false);
   const [deckName, setDeckName] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [categoryRules, setCategoryRules] = useState(null);
@@ -181,6 +181,8 @@ const DeckBuilderPage = () => {
   const [confirmation, setConfirmation] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
   const [showExportModal, setShowExportModal] = useState(false);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isDuplicatingDeck, setIsDuplicatingDeck] = useState(false);
   const [showDeltaConfirmation, setShowDeltaConfirmation] = useState(false);
   const [histogramTab, setHistogramTab] = useState('cost'); // 'cost', 'level', 'cardType', 'value'
@@ -922,6 +924,18 @@ const DeckBuilderPage = () => {
       if (!deck) {
         setError('Deck not found');
         return;
+      }
+
+      // Check if deck is private and user is not the owner
+      if (deck.private) {
+        const deckUserId = deck.user_id || deck.userId;
+        const currentUserId = user?.id;
+        
+        if (!currentUserId || deckUserId !== currentUserId) {
+          setError('This deck is private and you do not have permission to view it');
+          setDeckList(null);
+          return;
+        }
       }
 
       setDeckList(deck);
@@ -1687,16 +1701,35 @@ const DeckBuilderPage = () => {
       }
 
       const itemsToCopy = fullDeck.items || {};
+      // Preserve metadata fields when duplicating deck
+      const metadataOptions = {
+        color_1: fullDeck.color_1,
+        color_2: fullDeck.color_2,
+        strategy: fullDeck.strategy,
+        selling: fullDeck.selling,
+        buying: fullDeck.buying,
+        private: fullDeck.private
+      };
       const newDeck = await createDeckList(
         user.id,
         deckList.category_id,
         newDeckName,
-        itemsToCopy
+        itemsToCopy,
+        metadataOptions
       );
       const newDeckId = newDeck.deck_list_id || newDeck.id;
 
       if (newDeckId && Object.keys(itemsToCopy).length > 0) {
-        await updateDeckListItems(newDeckId, user.id, itemsToCopy);
+        // Preserve existing metadata fields when copying items to new deck
+        const metadataOptions = fullDeck ? {
+          color_1: fullDeck.color_1,
+          color_2: fullDeck.color_2,
+          strategy: fullDeck.strategy,
+          selling: fullDeck.selling,
+          buying: fullDeck.buying,
+          private: fullDeck.private
+        } : {};
+        await updateDeckListItems(newDeckId, user.id, itemsToCopy, metadataOptions);
       }
 
       setNotification({
@@ -1790,6 +1823,51 @@ const DeckBuilderPage = () => {
     return calculateDeltaUtil(deckItems, stagedDeckItems);
   };
 
+  // Extract unique colors from deck items with card counts
+  const extractDeckColors = (items) => {
+    const colorCounts = {}; // { color: count }
+    
+    // Iterate through all products in the deck
+    Object.keys(items).forEach(productId => {
+      const quantity = items[productId];
+      if (quantity <= 0) return; // Skip items with 0 or negative quantity
+      
+      // Get extended data for this product
+      const extData = productExtendedData[String(productId)] || [];
+      
+      // Extract all color values from extended data and count cards
+      extData.forEach(item => {
+        const key = item.key || item.name;
+        const value = item.value || item.val;
+        
+        // Check if this is a color attribute
+        if (key && value && key.toUpperCase() === 'COLOR') {
+          // Add the quantity to this color's count
+          if (!colorCounts[value]) {
+            colorCounts[value] = 0;
+          }
+          colorCounts[value] += quantity;
+        }
+      });
+    });
+    
+    // Convert to array of [color, count] pairs and sort by count (descending), then by color name
+    const colorArray = Object.entries(colorCounts)
+      .sort((a, b) => {
+        // Sort by count descending, then by color name ascending
+        if (b[1] !== a[1]) {
+          return b[1] - a[1];
+        }
+        return a[0].localeCompare(b[0]);
+      });
+    
+    // Format as {color}-{amount} and return up to 2 colors
+    return {
+      color_1: colorArray.length > 0 ? `${colorArray[0][0]}-${colorArray[0][1]}` : null,
+      color_2: colorArray.length > 1 ? `${colorArray[1][0]}-${colorArray[1][1]}` : null
+    };
+  };
+
   // Actual apply logic (called after confirmation)
   const applyDeckChanges = async () => {
     if (!user || !deckListId) return;
@@ -1835,13 +1913,33 @@ const DeckBuilderPage = () => {
 
       const itemsToDelete = removedItems.map(id => parseInt(id, 10));
 
-      // Perform updates
+      // Extract unique colors from the merged deck items
+      const deckColors = extractDeckColors(mergedItems);
+
+      // Prepare metadata options with updated colors
+      const metadataOptions = {
+        color_1: deckColors.color_1,
+        color_2: deckColors.color_2,
+        // Preserve other metadata fields
+        strategy: deckList?.strategy,
+        selling: deckList?.selling,
+        buying: deckList?.buying,
+        private: deckList?.private
+      };
+
+      // Perform updates (if any items to update)
       if (Object.keys(itemsToUpdate).length > 0) {
-        await updateDeckListItems(deckListId, user.id, itemsToUpdate);
+        await updateDeckListItems(deckListId, user.id, itemsToUpdate, metadataOptions);
       }
 
-      // Perform deletes
+      // Perform deletes (if any items to delete)
+      // If we only have deletes and no updates, we still need to update colors
       if (itemsToDelete.length > 0) {
+        if (Object.keys(itemsToUpdate).length === 0) {
+          // Only deletes, no updates - update colors via a minimal update
+          // Send empty items object but with metadata to update colors
+          await updateDeckListItems(deckListId, user.id, {}, metadataOptions);
+        }
         await deleteDeckListItems(deckListId, user.id, itemsToDelete);
       }
 
@@ -1902,37 +2000,59 @@ const DeckBuilderPage = () => {
     setShowDeltaConfirmation(false);
   };
 
-  const handleDeckNameSave = async () => {
-    if (!user || !deckListId || !deckName.trim()) return;
+  const handleDeckSettingsSave = async (settings) => {
+    if (!user || !deckListId) return;
 
     try {
-      await updateDeckListName(deckListId, user.id, deckName.trim());
-      setEditingDeckName(false);
+      setIsSavingSettings(true);
+      
+      // Preserve existing metadata fields when updating settings
+      const metadataOptions = {
+        color_1: deckList?.color_1,
+        color_2: deckList?.color_2,
+        strategy: settings.strategy,
+        selling: settings.selling,
+        buying: settings.buying,
+        private: settings.private
+      };
+      
+      await updateDeckListName(deckListId, user.id, settings.name || deckList?.name || '', metadataOptions);
       
       // Optimistically update the deckList state immediately
       if (deckList) {
         setDeckList({
           ...deckList,
-          name: deckName.trim()
+          name: settings.name || deckList.name,
+          ...settings
         });
+      }
+      
+      // Update deckName state if name was changed
+      if (settings.name) {
+        setDeckName(settings.name);
       }
       
       // Reload deck to sync with server (in background)
       loadingDeckListRef.current = false; // Reset guard to allow reload
-      loadDeckList().catch(err => {
-        console.error('Error reloading deck after name update:', err);
-        // If reload fails, revert to server state
-        loadingDeckListRef.current = false;
-        loadDeckList();
+      await loadDeckList();
+      
+      setShowSettingsModal(false);
+      setNotification({
+        isOpen: true,
+        title: 'Success',
+        message: 'Deck settings updated successfully.',
+        type: 'success'
       });
     } catch (err) {
-      console.error('Error updating deck name:', err);
+      console.error('Error updating deck settings:', err);
       setNotification({
         isOpen: true,
         title: 'Error',
-        message: 'Failed to update deck name. Please try again.',
+        message: 'Failed to update deck settings. Please try again.',
         type: 'error'
       });
+    } finally {
+      setIsSavingSettings(false);
     }
   };
 
@@ -2871,16 +2991,32 @@ const DeckBuilderPage = () => {
             {/* Deck Name Header */}
             <PageHeader
               title={deckList?.name || 'Unnamed Deck'}
-              editing={canEdit && editingDeckName}
-              editValue={deckName}
-              onEditChange={(value) => setDeckName(value)}
-              onEditSave={handleDeckNameSave}
-              onEditCancel={() => {
-                setDeckName(deckList.name || '');
-                setEditingDeckName(false);
-              }}
-              showEditButton={canEdit && !editingDeckName}
-              onEditClick={() => setEditingDeckName(true)}
+              titleActions={
+                canEdit && (
+                  <button
+                    className="settings-icon-button"
+                    onClick={() => setShowSettingsModal(true)}
+                    title="Deck settings"
+                  >
+                    ⚙️
+                  </button>
+                )
+              }
+              meta={
+                deckList && (
+                  <div className="page-header-tags">
+                    {deckList.strategy && (
+                      <span className="page-header-tag">{deckList.strategy}</span>
+                    )}
+                    <span className="page-header-tag">
+                      {deckList.private ? 'Private' : 'Public'}
+                    </span>
+                    <span className="page-header-tag">
+                      {deckList.selling ? 'WTS' : deckList.buying ? 'WTB' : 'Play'}
+                    </span>
+                  </div>
+                )
+              }
               actions={
                 <div className="deck-builder-header-actions">
                   {user && (
@@ -3190,6 +3326,14 @@ const DeckBuilderPage = () => {
         title="Duplicate Deck"
         message="Enter a name for the duplicated deck:"
         defaultValue={deckList ? `Copy of ${deckList.name || 'Untitled Deck'}` : ''}
+      />
+
+      <DeckSettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        onSave={handleDeckSettingsSave}
+        deckList={deckList}
+        isSaving={isSavingSettings}
       />
 
       {/* Deck Delta Confirmation Modal */}

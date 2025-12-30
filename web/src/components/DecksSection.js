@@ -14,8 +14,12 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
   const [loadingDecks, setLoadingDecks] = useState(false);
   const [editingDeckId, setEditingDeckId] = useState(null);
   const [editingName, setEditingName] = useState('');
+  const [editingPrivate, setEditingPrivate] = useState(false);
+  const [editingTradingStatus, setEditingTradingStatus] = useState('play'); // 'wts', 'wtb', or 'play'
   const [showAddDeckForm, setShowAddDeckForm] = useState(false);
   const [newDeckName, setNewDeckName] = useState('');
+  const [newDeckPrivate, setNewDeckPrivate] = useState(false);
+  const [newDeckTradingStatus, setNewDeckTradingStatus] = useState('play'); // 'wts', 'wtb', or 'play'
   const [categoryRules, setCategoryRules] = useState({});
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportDeckData, setExportDeckData] = useState({ deckName: '', deckItems: {}, deckProducts: [] });
@@ -230,6 +234,11 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
         : await fetchDeckLists(user.id, catId);
       let decks = Array.isArray(data) ? data : [];
       
+      // Filter out all private decks when fetching all users (e.g., on landing page)
+      if (fetchAllUsers) {
+        decks = decks.filter(deck => !deck.private);
+      }
+      
       // Sort by creation date if sortBy is "recent"
       if (sortBy === 'recent') {
         decks = [...decks].sort((a, b) => {
@@ -328,9 +337,21 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
     }
 
     try {
-      const newDeck = await createDeckList(user.id, categoryId, trimmedName);
+      // Convert trading status to selling/buying booleans
+      const selling = newDeckTradingStatus === 'wts';
+      const buying = newDeckTradingStatus === 'wtb';
+      
+      const options = {
+        private: newDeckPrivate,
+        selling,
+        buying
+      };
+      
+      const newDeck = await createDeckList(user.id, categoryId, trimmedName, {}, options);
       setDeckLists([...deckLists, newDeck]);
       setNewDeckName('');
+      setNewDeckPrivate(false);
+      setNewDeckTradingStatus('play');
       setShowAddDeckForm(false);
       
       // Navigate to deck builder
@@ -354,6 +375,16 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
   const handleStartEdit = (deckList) => {
     setEditingDeckId(deckList.deck_list_id || deckList.id);
     setEditingName(deckList.name || '');
+    setEditingPrivate(deckList.private || false);
+    
+    // Determine trading status from selling/buying fields
+    if (deckList.selling) {
+      setEditingTradingStatus('wts');
+    } else if (deckList.buying) {
+      setEditingTradingStatus('wtb');
+    } else {
+      setEditingTradingStatus('play');
+    }
   };
 
   const handleSaveEdit = async (deckListId) => {
@@ -362,12 +393,32 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
     }
 
     try {
-      const updated = await updateDeckListName(deckListId, user.id, editingName.trim());
+      // Convert trading status to selling/buying booleans
+      const selling = editingTradingStatus === 'wts';
+      const buying = editingTradingStatus === 'wtb';
+      
+      // Find the deck to preserve its metadata fields
+      const deckToUpdate = deckLists.find(deck => (deck.deck_list_id || deck.id) === deckListId);
+      const metadataOptions = deckToUpdate ? {
+        color_1: deckToUpdate.color_1,
+        color_2: deckToUpdate.color_2,
+        strategy: deckToUpdate.strategy,
+        selling,
+        buying,
+        private: editingPrivate
+      } : {
+        selling,
+        buying,
+        private: editingPrivate
+      };
+      const updated = await updateDeckListName(deckListId, user.id, editingName.trim(), metadataOptions);
       setDeckLists(deckLists.map(deck => 
         (deck.deck_list_id || deck.id) === deckListId ? updated : deck
       ));
       setEditingDeckId(null);
       setEditingName('');
+      setEditingPrivate(false);
+      setEditingTradingStatus('play');
     } catch (err) {
       console.error('Error updating deck list name:', err);
       setNotification({
@@ -382,6 +433,8 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
   const handleCancelEdit = () => {
     setEditingDeckId(null);
     setEditingName('');
+    setEditingPrivate(false);
+    setEditingTradingStatus('play');
   };
 
   const handleDeleteDeck = async (deckListId) => {
@@ -522,13 +575,21 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
         return;
       }
 
-      // Create new deck with the same items
-      const newDeck = await createDeckList(user.id, categoryId, newDeckName, fullDeck.items || {});
+      // Create new deck with the same items and metadata
+      const metadataOptions = {
+        color_1: fullDeck.color_1,
+        color_2: fullDeck.color_2,
+        strategy: fullDeck.strategy,
+        selling: fullDeck.selling,
+        buying: fullDeck.buying,
+        private: fullDeck.private
+      };
+      const newDeck = await createDeckList(user.id, categoryId, newDeckName, fullDeck.items || {}, metadataOptions);
       
-      // Update the new deck with all items from the original deck
+      // Update the new deck with all items from the original deck (if not already set during creation)
       if (fullDeck.items && Object.keys(fullDeck.items).length > 0) {
         const newDeckId = newDeck.deck_list_id || newDeck.id;
-        await updateDeckListItems(newDeckId, user.id, fullDeck.items);
+        await updateDeckListItems(newDeckId, user.id, fullDeck.items, metadataOptions);
       }
 
       // Force a fresh reload by resetting the loading refs
@@ -604,46 +665,114 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
                 >
                   {isEditing ? (
                     <div className="deck-edit-form" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="text"
-                        className="deck-name-input"
-                        value={editingName}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          setEditingName(e.target.value);
-                        }}
-                        onKeyPress={(e) => {
-                          e.stopPropagation();
-                          if (e.key === 'Enter') {
-                            handleSaveEdit(deckId);
-                          } else if (e.key === 'Escape') {
-                            handleCancelEdit();
-                          }
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        onFocus={(e) => e.stopPropagation()}
-                        autoFocus
-                      />
-                      <div className="deck-edit-actions">
-                        <button
-                          className="save-button"
-                          onClick={(e) => {
+                      <div className="add-deck-form-content">
+                        <input
+                          type="text"
+                          className="deck-name-input"
+                          placeholder="Enter deck name..."
+                          value={editingName}
+                          onChange={(e) => {
                             e.stopPropagation();
-                            handleSaveEdit(deckId);
+                            setEditingName(e.target.value);
                           }}
-                          disabled={!editingName.trim()}
-                        >
-                          Save
-                        </button>
-                        <button
-                          className="cancel-button"
-                          onClick={(e) => {
+                          onKeyPress={(e) => {
                             e.stopPropagation();
-                            handleCancelEdit();
+                            if (e.key === 'Enter') {
+                              handleSaveEdit(deckId);
+                            } else if (e.key === 'Escape') {
+                              handleCancelEdit();
+                            }
                           }}
-                        >
-                          Cancel
-                        </button>
+                          onClick={(e) => e.stopPropagation()}
+                          onFocus={(e) => e.stopPropagation()}
+                          autoFocus
+                        />
+                        
+                        <div className="add-deck-options">
+                          <label className="add-deck-checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={editingPrivate}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                setEditingPrivate(e.target.checked);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="add-deck-checkbox"
+                            />
+                            <span>Private</span>
+                          </label>
+                          
+                          <div className="add-deck-radio-group">
+                            <label className="add-deck-radio-label">
+                              <input
+                                type="radio"
+                                name={`edit-deck-trading-status-${deckId}`}
+                                value="wts"
+                                checked={editingTradingStatus === 'wts'}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  setEditingTradingStatus(e.target.value);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="add-deck-radio"
+                              />
+                              <span>WTS</span>
+                            </label>
+                            <label className="add-deck-radio-label">
+                              <input
+                                type="radio"
+                                name={`edit-deck-trading-status-${deckId}`}
+                                value="wtb"
+                                checked={editingTradingStatus === 'wtb'}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  setEditingTradingStatus(e.target.value);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="add-deck-radio"
+                              />
+                              <span>WTB</span>
+                            </label>
+                            <label className="add-deck-radio-label">
+                              <input
+                                type="radio"
+                                name={`edit-deck-trading-status-${deckId}`}
+                                value="play"
+                                checked={editingTradingStatus === 'play'}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  setEditingTradingStatus(e.target.value);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="add-deck-radio"
+                              />
+                              <span>Play</span>
+                            </label>
+                          </div>
+                        </div>
+                        
+                        <div className="deck-edit-actions">
+                          <button
+                            className="save-button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSaveEdit(deckId);
+                            }}
+                            disabled={!editingName.trim()}
+                          >
+                            Save
+                          </button>
+                          <button
+                            className="cancel-button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCancelEdit();
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -813,6 +942,15 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
                               return null;
                             })()}
                           </div>
+                          {/* Deck Tags */}
+                          <div className="deck-tags">
+                            <span className={`deck-tag deck-tag-${deck.private ? 'private' : 'public'}`}>
+                              {deck.private ? 'Private' : 'Public'}
+                            </span>
+                            <span className={`deck-tag deck-tag-${deck.selling ? 'wts' : deck.buying ? 'wtb' : 'play'}`}>
+                              {deck.selling ? 'WTS' : deck.buying ? 'WTB' : 'Play'}
+                            </span>
+                          </div>
                         </div>
                       </div>
                       <div className="deck-actions">
@@ -878,6 +1016,8 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
                     onClick={() => {
                       setShowAddDeckForm(true);
                       setNewDeckName('');
+                      setNewDeckPrivate(false);
+                      setNewDeckTradingStatus('play');
                     }}
                   >
                     <div className="deck-info">
@@ -888,49 +1028,120 @@ const DecksSection = ({ user, categoryId = 86, onDeckSelect, showAddDeck = true,
                   </div>
                 ) : (
                   <div className="deck-item add-deck-form-item" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="text"
-                      className="deck-name-input"
-                      placeholder="Enter deck name..."
-                      value={newDeckName}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        setNewDeckName(e.target.value);
-                      }}
-                      onKeyPress={(e) => {
-                        e.stopPropagation();
-                        if (e.key === 'Enter') {
-                          handleAddDeck();
-                        } else if (e.key === 'Escape') {
-                          setShowAddDeckForm(false);
-                          setNewDeckName('');
-                        }
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      onFocus={(e) => e.stopPropagation()}
-                      autoFocus
-                    />
-                    <div className="add-deck-actions">
-                      <button
-                        className="save-button"
-                        onClick={(e) => {
+                    <div className="add-deck-form-content">
+                      <input
+                        type="text"
+                        className="deck-name-input"
+                        placeholder="Enter deck name..."
+                        value={newDeckName}
+                        onChange={(e) => {
                           e.stopPropagation();
-                          handleAddDeck();
+                          setNewDeckName(e.target.value);
                         }}
-                        disabled={!newDeckName.trim()}
-                      >
-                        Create
-                      </button>
-                      <button
-                        className="cancel-button"
-                        onClick={(e) => {
+                        onKeyPress={(e) => {
                           e.stopPropagation();
-                          setShowAddDeckForm(false);
-                          setNewDeckName('');
+                          if (e.key === 'Enter') {
+                            handleAddDeck();
+                          } else if (e.key === 'Escape') {
+                            setShowAddDeckForm(false);
+                            setNewDeckName('');
+                            setNewDeckPrivate(false);
+                            setNewDeckTradingStatus('play');
+                          }
                         }}
-                      >
-                        Cancel
-                      </button>
+                        onClick={(e) => e.stopPropagation()}
+                        onFocus={(e) => e.stopPropagation()}
+                        autoFocus
+                      />
+                      
+                      <div className="add-deck-options">
+                        <label className="add-deck-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={newDeckPrivate}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              setNewDeckPrivate(e.target.checked);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="add-deck-checkbox"
+                          />
+                          <span>Private</span>
+                        </label>
+                        
+                        <div className="add-deck-radio-group">
+                          <label className="add-deck-radio-label">
+                            <input
+                              type="radio"
+                              name="new-deck-trading-status"
+                              value="wts"
+                              checked={newDeckTradingStatus === 'wts'}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                setNewDeckTradingStatus(e.target.value);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="add-deck-radio"
+                            />
+                            <span>WTS</span>
+                          </label>
+                          <label className="add-deck-radio-label">
+                            <input
+                              type="radio"
+                              name="new-deck-trading-status"
+                              value="wtb"
+                              checked={newDeckTradingStatus === 'wtb'}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                setNewDeckTradingStatus(e.target.value);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="add-deck-radio"
+                            />
+                            <span>WTB</span>
+                          </label>
+                          <label className="add-deck-radio-label">
+                            <input
+                              type="radio"
+                              name="new-deck-trading-status"
+                              value="play"
+                              checked={newDeckTradingStatus === 'play'}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                setNewDeckTradingStatus(e.target.value);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="add-deck-radio"
+                            />
+                            <span>Play</span>
+                          </label>
+                        </div>
+                      </div>
+                      
+                      <div className="add-deck-actions">
+                        <button
+                          className="save-button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAddDeck();
+                          }}
+                          disabled={!newDeckName.trim()}
+                        >
+                          Create
+                        </button>
+                        <button
+                          className="cancel-button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowAddDeckForm(false);
+                            setNewDeckName('');
+                            setNewDeckPrivate(false);
+                            setNewDeckTradingStatus('play');
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
